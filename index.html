@@ -1,170 +1,186 @@
-<header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-4 mb-12 max-w-3xl mx-auto">
-    <div>
-        <h1 class="text-3xl uppercase tracking-widest text-[#1D3557]">LionMail Helper</h1>
-        <p class="text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-1 font-semibold">Columbia University Executive Briefing</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LionMail Helper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #111111; }
+        h1, h2 { font-family: 'Playfair Display', serif; }
+        .btn-lionmail { background-color: #1D3557; color: white; transition: all 0.2s; cursor: pointer; border-radius: 4px; }
+        .btn-lionmail:hover { background-color: #457B9D; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="p-8">
+
+    <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-4 mb-12 max-w-3xl mx-auto">
+        <div>
+            <h1 class="text-3xl uppercase tracking-widest text-[#1D3557]">LionMail Helper</h1>
+            <p class="text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-1 font-semibold">Columbia University Executive Briefing</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <button id="refresh_btn" onclick="runLionMailBriefing()" class="hidden p-2 text-gray-400 hover:text-[#1D3557] border rounded hover:bg-gray-50 transition-all" title="Refresh Briefing">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+            <button id="auth_btn" onclick="handleAuthClick()" class="btn-lionmail px-6 py-2 text-xs uppercase tracking-widest">Connect</button>
+        </div>
+    </header>
+
+    <div id="dashboard" class="max-w-3xl mx-auto opacity-30 pointer-events-none transition-opacity duration-700">
+        <div id="brief-content" class="space-y-16">
+            <p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-300">Awaiting Connection...</p>
+        </div>
     </div>
-    <div class="flex items-center gap-4">
-        <button id="refresh_btn" onclick="runLionMailBriefing()" class="hidden text-gray-400 hover:text-[#1D3557] transition-colors" title="Refresh Briefing">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658a.25.25 0 0 1-.41-.192z"/>
-            </svg>
-        </button>
-        <button id="auth_btn" onclick="handleAuthClick()" class="btn-lionmail px-6 py-2 text-xs uppercase tracking-widest">Connect</button>
-    </div>
-</header>
 
-<script>
-    /* --- CONFIGURATION --- */
-    const CLIENT_ID = '726223768097-u4ksqn50sb8kadet8pm8aet20sqa26er.apps.googleusercontent.com'; 
-    const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
+    <script>
+        /* --- CONFIGURATION --- */
+        const CLIENT_ID = '726223768097-u4ksqn50sb8kadet8pm8aet20sqa26er.apps.googleusercontent.com'; 
+        const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
 
-    let tokenClient;
-    let gapiInited = false;
-    let gisInited = false;
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
 
-    function gapiLoaded() {
-        gapi.load('client', async () => {
-            await gapi.client.init({
-                discoveryDocs: [
-                    "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
-                    "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-                    "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
-                ],
+        function gapiLoaded() {
+            gapi.load('client', async () => {
+                await gapi.client.init({
+                    discoveryDocs: [
+                        "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
+                        "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
+                        "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
+                    ],
+                });
+                gapiInited = true;
             });
-            gapiInited = true;
-        });
-    }
+        }
 
-    function gisLoaded() {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-            callback: '', 
-        });
-        gisInited = true;
-    }
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '', 
+            });
+            gisInited = true;
+        }
 
-    function handleAuthClick() {
-        tokenClient.callback = async (resp) => {
-            if (resp.error !== undefined) { throw (resp); }
-            document.getElementById('auth_btn').classList.add('hidden');
-            document.getElementById('refresh_btn').classList.remove('hidden');
-            document.getElementById('dashboard').classList.remove('opacity-30', 'pointer-events-none');
-            await runLionMailBriefing();
-        };
-        tokenClient.requestAccessToken({ prompt: 'select_account consent' });
-    }
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) { throw (resp); }
+                document.getElementById('auth_btn').classList.add('hidden');
+                document.getElementById('refresh_btn').classList.remove('hidden');
+                document.getElementById('dashboard').classList.remove('opacity-30', 'pointer-events-none');
+                await runLionMailBriefing();
+            };
+            tokenClient.requestAccessToken({ prompt: 'select_account consent' });
+        }
 
-    /* --- CORE LOGIC: v3.5 --- */
-    async function runLionMailBriefing() {
-        const container = document.getElementById('brief-content');
-        const now = new Date();
-        const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Updating Briefing (${timestamp})...</p>`;
+        async function runLionMailBriefing() {
+            const container = document.getElementById('brief-content');
+            const now = new Date();
+            const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Updating Briefing (${timestamp})...</p>`;
 
-        async function safeFetch(request) {
+            async function safeFetch(request) {
+                try {
+                    const response = await request;
+                    return response.result;
+                } catch (e) {
+                    console.warn("LionMail Helper: Section failed to load (Permissions/API issue):", e);
+                    return {}; 
+                }
+            }
+
             try {
-                const response = await request;
-                return response.result;
-            } catch (e) {
-                console.warn("Section failed to load:", e);
-                return {}; 
+                const [emails, drafts, calendar, tasks] = await Promise.all([
+                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread', 'maxResults': 10 })),
+                    safeFetch(gapi.client.gmail.users.drafts.list({ 'userId': 'me' })),
+                    safeFetch(gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': now.toISOString(), 'singleEvents': true, 'orderBy': 'startTime', 'maxResults': 30 })),
+                    safeFetch(gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': true, 'showHidden': true }))
+                ]);
+
+                const allTasks = tasks.items || [];
+                const activeTasks = allTasks.filter(t => t.status !== 'completed');
+                const completedTitles = allTasks.filter(t => t.status === 'completed').map(t => (t.title || "").toLowerCase());
+                
+                const rawEvents = calendar.items || [];
+                const draftItems = drafts.drafts || [];
+                const unreadCount = (emails.messages || []).length;
+
+                // 1. SMART CALENDAR FILTERING (Hide routines & completed tasks)
+                const uniqueEvents = rawEvents.filter(event => {
+                    const title = (event.summary || "").toLowerCase();
+                    const isRoutine = event.recurringEventId;
+                    const isGhostTask = completedTitles.some(taskTitle => taskTitle !== "" && title.includes(taskTitle));
+                    const isException = title.includes("holiday") || title.includes("no class") || title.includes("first") || title.includes("exam") || title.includes("reception");
+                    return (!isRoutine && !isGhostTask) || isException;
+                });
+
+                // 2. CONSTRUCT EXECUTIVE SUMMARY
+                let emailBrief = unreadCount === 0 ? "You are all caught up with emails." : `You have ${unreadCount} unread messages.`;
+                let scheduledNote = draftItems.length > 0 ? "Your scheduled email is queued and good to go." : "No scheduled emails detected.";
+
+                container.innerHTML = `
+                    <div class="text-center -mb-8 animate-fade-in">
+                        <p class="text-[9px] uppercase tracking-widest text-gray-300 font-bold">Updated: ${timestamp}</p>
+                    </div>
+
+                    <section class="text-center space-y-4 animate-fade-in">
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Executive Summary</h2>
+                        <div class="p-10 bg-gray-50 border border-gray-100 italic text-sm text-gray-700 leading-relaxed font-serif shadow-sm">
+                            <p class="mb-2">${emailBrief}</p>
+                            <p>Your calendar has no conflicts; class as usual this week.</p>
+                            <p class="mt-4 text-[11px] uppercase tracking-widest text-[#457B9D] font-sans font-bold italic border-t border-gray-100 pt-4">${scheduledNote}</p>
+                        </div>
+                    </section>
+
+                    <section class="${activeTasks.length > 0 ? 'animate-fade-in' : 'hidden'}">
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-[#1D3557] mb-6 text-center">Pending Tasks</h2>
+                        <div class="space-y-3">
+                            ${activeTasks.map(t => `
+                                <div class="flex items-center gap-4 p-4 border border-gray-100 bg-white shadow-sm hover:border-[#9BCBEB] transition-colors">
+                                    <div class="w-2 h-2 rounded-full bg-[#9BCBEB]"></div>
+                                    <span class="text-sm font-medium tracking-tight">${t.title}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </section>
+
+                    <section class="animate-fade-in">
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center">Unique Events & Exceptions</h2>
+                        <div class="space-y-6">
+                            ${uniqueEvents.length > 0 ? uniqueEvents.map(e => {
+                                const start = new Date(e.start.dateTime || e.start.date);
+                                return `
+                                    <div class="flex items-baseline gap-8 pb-6 border-b border-gray-100 last:border-0">
+                                        <div class="w-28 text-[10px] uppercase font-bold text-gray-400">
+                                            ${start.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}
+                                        </div>
+                                        <div class="flex-1">
+                                            <p class="text-sm font-bold uppercase tracking-tight text-[#1D3557]">${e.summary}</p>
+                                            <p class="text-[10px] text-gray-400 mt-2 font-semibold uppercase">
+                                                ${e.start.dateTime ? start.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : 'All Day'}
+                                            </p>
+                                        </div>
+                                    </div>`;
+                            }).join('') : '<p class="text-xs italic text-center text-gray-400 py-10">No unique events detected.</p>'}
+                        </div>
+                    </section>
+                `;
+            } catch (err) {
+                console.error("Briefing Error:", err);
+                container.innerHTML = `<p class="p-10 text-center text-xs text-red-500 uppercase tracking-widest border border-red-100">Update Failed: ${err.message}</p>`;
             }
         }
+    </script>
 
-        try {
-            // Fetch everything with cross-reference permissions
-            const [emails, drafts, calendar, tasks] = await Promise.all([
-                safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread', 'maxResults': 10 })),
-                safeFetch(gapi.client.gmail.users.drafts.list({ 'userId': 'me' })),
-                safeFetch(gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': now.toISOString(), 'singleEvents': true, 'orderBy': 'startTime', 'maxResults': 30 })),
-                safeFetch(gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': true, 'showHidden': true }))
-            ]);
-
-            const allTasks = tasks.items || [];
-            const activeTasks = allTasks.filter(t => t.status !== 'completed');
-            const completedTaskTitles = allTasks.filter(t => t.status === 'completed').map(t => (t.title || "").toLowerCase());
-            
-            const rawEvents = calendar.items || [];
-            const draftItems = drafts.drafts || [];
-            const unreadCount = (emails.messages || []).length;
-
-            // 1. SMART CALENDAR FILTERING
-            const uniqueEvents = rawEvents.filter(event => {
-                const title = (event.summary || "").toLowerCase();
-                const isRoutine = event.recurringEventId;
-                
-                // Cross-reference: Skip if calendar event matches a COMPLETED task
-                const isGhostTask = completedTaskTitles.some(taskTitle => taskTitle !== "" && title.includes(taskTitle));
-                
-                // Keep exceptions (Holidays, Exams, Receptions) regardless
-                const isException = title.includes("holiday") || title.includes("no class") || title.includes("first") || title.includes("exam") || title.includes("reception");
-                
-                return (!isRoutine && !isGhostTask) || isException;
-            });
-
-            // 2. TONE-CORRECT SUMMARY
-            let emailBrief = unreadCount === 0 
-                ? "You are all caught up with emails." 
-                : `You have ${unreadCount} unread messages.`;
-
-            let scheduledNote = draftItems.length > 0 
-                ? "Your scheduled email is queued and good to go." 
-                : "No scheduled emails detected.";
-
-            container.innerHTML = `
-                <div class="text-center -mb-8">
-                    <p class="text-[9px] uppercase tracking-widest text-gray-300 font-bold">Last Updated: ${timestamp}</p>
-                </div>
-
-                <section class="text-center space-y-4">
-                    <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Executive Summary</h2>
-                    <div class="p-10 bg-gray-50 border border-gray-100 italic text-sm text-gray-700 leading-relaxed font-serif shadow-sm">
-                        <p class="mb-2">${emailBrief}</p>
-                        <p>Your calendar has no conflicts; class as usual this week.</p>
-                        <p class="mt-4 text-[11px] uppercase tracking-widest text-[#457B9D] font-sans font-bold italic">${scheduledNote}</p>
-                    </div>
-                </section>
-
-                <section class="${activeTasks.length > 0 ? '' : 'hidden'}">
-                    <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-[#1D3557] mb-6 text-center">Pending Tasks</h2>
-                    <div class="space-y-3">
-                        ${activeTasks.map(t => `
-                            <div class="flex items-center gap-4 p-4 border border-gray-100 bg-white shadow-sm">
-                                <div class="w-2 h-2 rounded-full bg-[#9BCBEB]"></div>
-                                <span class="text-sm font-medium tracking-tight">${t.title}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </section>
-
-                <section>
-                    <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center text-center">Unique Events & Exceptions</h2>
-                    <div class="space-y-6">
-                        ${uniqueEvents.length > 0 ? uniqueEvents.map(e => {
-                            const start = new Date(e.start.dateTime || e.start.date);
-                            return `
-                                <div class="flex items-baseline gap-8 pb-6 border-b border-gray-100 last:border-0">
-                                    <div class="w-28 text-[10px] uppercase font-bold text-gray-400">
-                                        ${start.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}
-                                    </div>
-                                    <div class="flex-1">
-                                        <p class="text-sm font-bold uppercase tracking-tight text-[#1D3557]">${e.summary}</p>
-                                        <p class="text-[10px] text-gray-400 mt-2 font-semibold uppercase">
-                                            ${e.start.dateTime ? start.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : 'All Day'}
-                                        </p>
-                                    </div>
-                                </div>`;
-                        }).join('') : '<p class="text-xs italic text-center text-gray-400 py-10">No unique events detected.</p>'}
-                    </div>
-                </section>
-            `;
-
-        } catch (err) {
-            console.error("Briefing Error:", err);
-            container.innerHTML = `<p class="p-10 text-center text-xs text-red-500 uppercase tracking-widest">Update Failed: ${err.message}</p>`;
-        }
-    }
-</script>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+</body>
+</html>
