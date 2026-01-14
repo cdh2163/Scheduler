@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEADLINE SENTINEL | Law Student Chief of Staff</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #111111; }
+        h1, h2, h3 { font-family: 'Playfair Display', serif; letter-spacing: -0.02em; }
+        .legal-border { border: 1px solid #e5e7eb; border-radius: 0px !important; }
+        .status-critical { border-left: 4px solid #000000; background-color: #fdf2f2; }
+        .status-low { border-left: 4px solid #9ca3af; background-color: #f9fafb; }
+        .btn-paulweiss { background-color: #111111; color: white; border-radius: 0px; transition: all 0.2s; }
+        .btn-paulweiss:hover { background-color: #333333; }
+    </style>
+</head>
+<body class="p-8">
+
+    <header class="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
+        <div>
+            <h1 class="text-3xl uppercase tracking-widest">Deadline Sentinel</h1>
+            <p class="text-sm uppercase tracking-tighter text-gray-500 mt-1">Law Student Chief of Staff & Career Strategist</p>
+        </div>
+        <div class="flex gap-4">
+            <button id="auth_button" onclick="handleAuthClick()" class="btn-paulweiss px-6 py-2 text-xs uppercase tracking-widest">Connect Workspace</button>
+            <button id="refresh_button" onclick="refreshData()" class="border border-black px-4 py-2 text-xs uppercase tracking-widest hover:bg-gray-100">Refresh Pulse</button>
+        </div>
+    </header>
+
+    <main class="grid grid-cols-1 md:grid-cols-3 gap-10">
+        
+        <section>
+            <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">Inbox Pulse</h2>
+            <div id="email_list" class="space-y-4">
+                <div class="text-xs text-gray-400 italic">Connect your account to scan recent correspondence...</div>
+                <div class="legal-border p-4">
+                    <div class="flex justify-between text-[10px] uppercase tracking-widest text-gray-500 mb-2">
+                        <span>From: Davis Polk</span>
+                        <span>2h ago</span>
+                    </div>
+                    <p class="text-sm font-semibold">Invitation: 1L Reception</p>
+                    <p class="text-xs text-gray-600 mt-1 truncate">We would like to invite you to our offices on Jan 15...</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">The 10-Day Horizon</h2>
+            <div id="calendar_list" class="space-y-4">
+                <div class="flex gap-4">
+                    <div class="w-12 text-center">
+                        <span class="block text-xs uppercase text-gray-400">Jan</span>
+                        <span class="block text-xl font-bold leading-none">20</span>
+                    </div>
+                    <div class="flex-1 border-l border-gray-200 pl-4 py-1">
+                        <p class="text-sm font-semibold italic uppercase tracking-tighter">Semester Start</p>
+                        <p class="text-xs text-gray-500">9:00 AM • Criminal Law (JG 103)</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">Sentinel Alerts</h2>
+            <div id="alert_list" class="space-y-4">
+                <div class="status-critical p-4 legal-border">
+                    <h4 class="text-xs font-bold uppercase tracking-widest mb-1 text-red-600">Critical Conflict</h4>
+                    <p class="text-sm font-semibold leading-snug">Davis Polk Reception vs. Legal Methods Final Prep</p>
+                    <p class="text-xs text-gray-600 mt-2">The reception on Jan 15 overlaps with your 4-hour blocked study time for Legal Methods.</p>
+                </div>
+
+                <div class="status-low p-4 legal-border">
+                    <h4 class="text-xs font-bold uppercase tracking-widest mb-1 text-gray-500">Scheduling Note</h4>
+                    <p class="text-sm font-semibold leading-snug">Office Hours Overlap</p>
+                    <p class="text-xs text-gray-600 mt-2">Torts Office Hours overlap with the MoFo Career Spotlight. Sentinel logic: Low importance.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        /* VIBE CODING LOGIC:
+           1. Connects to Google API
+           2. Scans Email for "Jan", "Feb", "Monday", etc.
+           3. Compares found dates against Calendar IDs.
+        */
+
+        const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+        const API_KEY = 'YOUR_API_KEY';
+        const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly';
+
+        function handleAuthClick() {
+            // Placeholder for Google Auth Logic
+            alert("Vibe Check: GAPI Authorization would trigger here. Replace CLIENT_ID to go live.");
+        }
+
+        function refreshData() {
+            // Logic to pull data and run the Sentinel conflict analysis
+            console.log("Sentinel is scanning...");
+        }
+
+        // Sentinel Logic: Simple Keyword Date Matcher
+        function checkConflicts(emailBody, eventTime) {
+            // A more advanced version would use Regex or LLM to extract dates
+            return emailBody.includes(eventTime);
+        }
+    </script>
+</body>
+</html>
