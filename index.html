@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v8.0 | Executive Chief of Staff</title>
+    <title>LionMail Helper v8.1 | Executive Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -30,7 +30,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v8.0</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v8.1</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -50,6 +50,7 @@
     </main>
 
     <script>
+        // --- UTILITIES ---
         function getStoredKey(keyName, promptMsg) {
             let val = localStorage.getItem(keyName);
             if (!val || val === "null") {
@@ -59,11 +60,23 @@
             return val;
         }
 
+        // Decodes HTML entities (e.g., &#39; -> ') so the AI doesn't flag false typos
+        function cleanText(input) {
+            if (!input) return "";
+            const doc = new DOMParser().parseFromString(input, "text/html");
+            return doc.documentElement.textContent;
+        }
+
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
             const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-            const listData = await (await fetch(listUrl)).json();
-            const bestModel = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash"))?.name || "models/gemini-1.5-flash";
+            
+            // Fallback protection if model list fails
+            let bestModel = "models/gemini-1.5-flash"; 
+            try {
+                const listData = await (await fetch(listUrl)).json();
+                bestModel = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash"))?.name || bestModel;
+            } catch(e) { console.warn("Model list fetch failed, using default."); }
 
             const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel}:generateContent?key=${apiKey}`;
             const response = await fetch(genUrl, {
@@ -72,9 +85,10 @@
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
             const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "System Error: AI Response Empty.";
         }
 
+        // --- AUTH ---
         const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
         let tokenClient;
 
@@ -106,92 +120,123 @@
             tokenClient.requestAccessToken({ prompt: 'select_account' });
         }
 
+        // --- CORE LOGIC ---
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
             const loadingOptions = [
                 "Briefing the Chief of Staff...",
-                "Analyzing Law School Logistics...",
+                "Cross-referencing Holidays...",
+                "Scanning for Conflicts...",
                 "Synthesizing Executive Briefing..."
             ];
-            const randomLoading = loadingOptions[Math.floor(Math.random() * loadingOptions.length)];
-            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">${randomLoading}</p>`;
+            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">${loadingOptions[Math.floor(Math.random() * loadingOptions.length)]}</p>`;
 
             try {
                 const now = new Date();
                 const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
                 const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-                const [inbox, calendar, tasks, scheduled] = await Promise.all([
+                // 1. Fetch Data (Parallel)
+                const [inbox, calendar, holidays, tasks, scheduled] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
+                    // Main Calendar
                     gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
-                    // FIXED: Strictly exclude completed tasks at the API level
+                    // US Holidays
+                    gapi.client.calendar.events.list({ calendarId: 'en.usa#holiday@group.v.calendar.google.com', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 5 }),
+                    // Tasks (Strictly filtered)
                     gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: false, showHidden: false }),
+                    // Scheduled Emails
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'label:scheduled' })
                 ]);
 
-                // Double verification: Filter to ensure status is 'needsAction'
-                const pendingTasks = (tasks.result.items || []).filter(t => t.status === 'needsAction');
+                // 2. Process Calendar & Holidays
+                // Filter out cancelled events to prevent ghost data
+                const validEvents = (calendar.result.items || []).filter(e => e.status !== 'cancelled');
+                
+                const activeEvents = validEvents.map(e => {
+                    const startDate = new Date(e.start.dateTime || e.start.date);
+                    const endDate = new Date(e.end.dateTime || e.end.date);
+                    return {
+                        summary: e.summary,
+                        start: startDate,
+                        end: endDate,
+                        location: e.location || null,
+                        // Include END TIME in raw data for AI conflict detection
+                        raw: `- ${e.summary}: ${startDate.toLocaleTimeString()} to ${endDate.toLocaleTimeString()} (${startDate.toLocaleDateString()}) ${e.location ? '@ ' + e.location : ''}`
+                    };
+                });
 
-                // LOCATION LOGIC: If missing, send nothing.
-                const activeEvents = (calendar.result.items || []).map(e => ({
-                    summary: e.summary,
-                    start: new Date(e.start.dateTime || e.start.date),
-                    location: e.location || null,
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date}${e.location ? ' @ ' + e.location : ''}`
-                }));
+                const holidayEvents = (holidays.result.items || []).map(h => `- HOLIDAY ALERT: ${h.summary} on ${new Date(h.start.date).toLocaleDateString()}`);
 
-                // SCHEDULED EMAIL LOGIC
+                // 3. Process Scheduled Emails (with HTML Cleaning)
                 let scheduledContext = "No scheduled emails found.";
                 if (scheduled.result.messages) {
                     const scheduledDetails = await Promise.all(scheduled.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
                     scheduledContext = scheduledDetails.map(d => {
                         const subj = d.result.payload.headers.find(h=>h.name==='Subject')?.value || 'No Subject';
-                        return `Subject: "${subj}" | Body Snippet: ${d.result.snippet}`;
+                        // Clean the snippet to remove &amp; &#39; etc.
+                        const rawSnippet = d.result.snippet; 
+                        return `Subject: "${cleanText(subj)}" | Body Snippet: ${cleanText(rawSnippet)}`;
                     }).join('\n');
                 }
 
+                // 4. Process Inbox
                 let emailContext = "";
                 if (inbox.result.messages) {
                     const details = await Promise.all(inbox.result.messages.slice(0, 10).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
-                    emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
+                    emailContext = details.map(d => `From: ${cleanText(d.result.payload.headers.find(h=>h.name==='From').value)} | Subj: ${cleanText(d.result.payload.headers.find(h=>h.name==='Subject').value)}`).join('\n');
                 }
 
-                // BRIEFING PROMPT
+                // 5. Process Tasks (Double verify needsAction)
+                const pendingTasks = (tasks.result.items || []).filter(t => t.status === 'needsAction');
+
+                // --- AI PROMPT CONSTRUCTION ---
                 const briefingPrompt = `You are Christopher's Chief of Staff. DATE: ${dateString}.
                 
                 STRUCTURE:
-                Daily Summary - [Date]
-                📧 Recent Email Activity (🔴 High Priority)
-                📅 Today's Calendar (Next 24h)
-                ⚠️ SCHEDULING CONFLICT DETECTED
-                📋 Action Items (From Pending Tasks Only)
-                🌟 Future Highlights
+                1. 🛑 URGENT ALERTS (Conflicts or Immediate Deadlines Only)
+                2. 🏛️ Holiday Awareness (If relevant in next 7 days)
+                3. 📧 Inbox Triage (Group by: Professors/Partners vs. Admin/Peers)
+                4. 📅 Tactical Schedule (Next 24 Hours)
+                5. 📋 Action Items
+                
+                DATA:
+                CALENDAR (Note Start and End times to detect OVERLAPS):
+                ${activeEvents.map(e => e.raw).join('\n')}
+                
+                HOLIDAYS:
+                ${holidayEvents.join('\n')}
+                
+                EMAILS:
+                ${emailContext}
+                
+                PENDING TASKS:
+                ${pendingTasks.map(t => t.title).join('\n')}`;
 
-                STRATEGIC FILTERING:
-                1. 48-HOUR FOCUS.
-                2. LOCATION: If blank, say nothing.
-                3. TASKS: Pending items only.
-                4. HOLIDAYS: Only mention if in the next 7 days.
-
-                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}\nPENDING TASKS:\n${pendingTasks.map(t => t.title).join('\n')}`;
-
-                // PROOFREADING PROMPT
                 const auditPrompt = `You are a strict PROOFREADER. Review these SCHEDULED emails.
                 
-                SCHEDULED EMAILS:\n${scheduledContext}
+                SCHEDULED EMAILS:
+                ${scheduledContext}
 
-                TASK: Check for Typos, Grammar errors, or Weird formatting/names.
-                DO NOT check the schedule. DO NOT check the substance.
+                TASK: Check for Typos, Grammar errors, or Weird formatting.
+                NOTE: The text has been cleaned of HTML entities. If you see a standard apostrophe ('), it is correct. DO NOT flag standard punctuation as an error.
                 
                 OUTPUT FORMAT (One line per email):
-                "📧 [Subject] — [✅ Clean / ⚠️ Typo Found] — [If typo, specify exactly what is wrong. If clean, say "Ready to send."]"
-                
-                If no emails, say "No outgoing correspondence pending."`;
+                "📧 [Subject] — [✅ Clean / ⚠️ Typo Found] — [If typo, specify exactly what is wrong. If clean, say "Ready to send."]"`;
 
+                // 6. Fetch AI
                 const [aiBriefing, aiAudit] = await Promise.all([
                     getAIResponse(briefingPrompt),
                     getAIResponse(auditPrompt)
                 ]);
+
+                // 7. Render UI
+                // Filter Logic: Events in Next 24h, capped at 6 items.
+                const next24hEvents = activeEvents.filter(e => e.start > now && e.start <= tomorrow);
+                const displayEvents = next24hEvents.slice(0, 6); // Take top 6 of the 24h window
+                
+                // If the list is empty but we have events later, maybe show the immediate next one? 
+                // For now, sticking to user logic: "next 24 hours... whichever is shorter"
 
                 container.innerHTML = `
                     <section class="animate-fade-in">
@@ -205,8 +250,12 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
                         <section>
-                            <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Verified Schedule</h2>
-                            ${activeEvents.filter(e => e.start <= tomorrow).map(e => `
+                            <div class="flex justify-between items-end border-b pb-2 mb-6">
+                                <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Verified Schedule</h2>
+                                <span class="text-[9px] text-gray-300 uppercase tracking-widest">Next 24h</span>
+                            </div>
+                            
+                            ${displayEvents.length > 0 ? displayEvents.map(e => `
                                 <div class="time-card">
                                     <div class="time-meta">
                                         <p class="text-[10px] font-bold text-[#1D3557] uppercase">${e.start.toLocaleDateString([], {month:'short', day:'numeric'})}</p>
@@ -216,7 +265,8 @@
                                         <p class="text-sm font-bold text-[#1D3557]">${e.summary}</p>
                                         ${e.location ? `<p class="text-[10px] text-red-700 font-semibold uppercase">📍 ${e.location}</p>` : ''}
                                     </div>
-                                </div>`).join('')}
+                                </div>`).join('') 
+                                : '<p class="text-xs text-gray-400 italic py-4">No events in the next 24 hours.</p>'}
                         </section>
 
                         <section>
@@ -231,7 +281,7 @@
                     </div>`;
             } catch (err) {
                 console.error(err);
-                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">Chief of Staff Sync Error</div>`;
+                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">Chief of Staff Sync Error: ${err.message}</div>`;
             }
         }
     </script>
