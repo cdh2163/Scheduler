@@ -79,11 +79,10 @@
 
         async function runLionMailBriefing() {
                 const container = document.getElementById('brief-content');
-                container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest text-gray-400 animate-pulse">Filtering Routine Noise...</p>`;
+                container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest text-gray-400 animate-pulse">Consulting the Chief of Staff...</p>`;
         
                 try {
                     const now = new Date();
-                    // Removed timeMax so it looks as far ahead as the maxResults allow
                     
                     const [inbox, calendar, tasks, scheduled] = await Promise.all([
                         gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
@@ -92,83 +91,92 @@
                             timeMin: now.toISOString(), 
                             singleEvents: true, 
                             orderBy: 'startTime',
-                            maxResults: 25 // Increased to see further out
+                            maxResults: 30 
                         }),
                         gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true }),
                         gapi.client.gmail.users.messages.list({ userId: 'me', q: 'label:scheduled' })
                     ]);
         
-                    // 1. FILTER LOGIC
+                    // 1. DATA PREP: Filter Ghost Tasks
                     const allTasks = tasks.result.items || [];
                     const completedTitles = allTasks.filter(t => t.status === 'completed').map(t => t.title.toLowerCase().trim());
         
-                    const strategicEvents = (calendar.result.items || []).filter(e => {
+                    // 2. CONTEXT BUNDLING: Create the "Situation Report"
+                    let calendarContext = "CALENDAR EVENTS (with times/locations):\n";
+                    const processedEvents = (calendar.result.items || []).filter(e => {
                         const title = e.summary.toLowerCase().trim();
-                        
-                        // IGNORE: If it's a completed task
-                        if (completedTitles.includes(title)) return false;
-                        
-                        // IGNORE: Routine Classes (Adjust keywords to your specific class names)
-                        const routineKeywords = ['class', 'lecture', 'seminar', 'l-w', 'property', 'torts', 'contracts', 'civ pro', 'con law'];
-                        if (routineKeywords.some(kw => title.includes(kw)) && e.recurringEventId) return false;
-        
-                        return true; // KEEP: Firm events, MLK day, one-off meetings
+                        return !completedTitles.includes(title);
+                    }).map(e => {
+                        const start = e.start.dateTime || e.start.date;
+                        const end = e.end.dateTime || e.end.date;
+                        const loc = e.location || "No location listed";
+                        return `- ${e.summary}: ${new Date(start).toLocaleString()} to ${new Date(end).toLocaleTimeString()} at ${loc}`;
                     });
+                    calendarContext += processedEvents.join('\n');
         
-                    // 2. CONFLICT DETECTION (Hard Logic)
-                    let conflictNotice = "";
-                    const conflictMap = {};
-                    strategicEvents.forEach(e => {
-                        if (e.start.dateTime) {
-                            const time = e.start.dateTime;
-                            if (!conflictMap[time]) conflictMap[time] = [];
-                            conflictMap[time].push(e.summary);
-                        }
-                    });
-                    
-                    for (const time in conflictMap) {
-                        if (conflictMap[time].length > 1) {
-                            conflictNotice += `🚨 **OVERLAP DETECTED**: ${conflictMap[time].join(' vs ')} at ${new Date(time).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}\n`;
-                        }
+                    let emailContext = "RECENT UNREAD EMAILS:\n";
+                    if (inbox.result.messages) {
+                        const details = await Promise.all(inbox.result.messages.slice(0, 8).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                        emailContext += details.map(d => {
+                            const subj = d.result.payload.headers.find(h => h.name === 'Subject').value;
+                            const from = d.result.payload.headers.find(h => h.name === 'From').value;
+                            return `- FROM: ${from} | SUBJ: ${subj} | CONTENT: ${d.result.snippet}`;
+                        }).join('\n');
                     }
         
-                    // 3. AI PROCESSING
-                    const inboxMsg = (inbox.result.messages || []).length;
-                    const aiPrompt = `You are a Law School Chief of Staff. Summarize these signals for Christopher. 
-                    ${conflictNotice}
-                    Focus on Firm Events, unique holidays, and unread mail. Ignore routine academic tasks.
-                    Tone: Paul Weiss executive. Emojis.
-                    DATA: ${strategicEvents.map(e => e.summary).join(', ')} | Unread Count: ${inboxMsg}`;
+                    // 3. THE "ZAPIER-STYLE" AI PROMPT
+                    const aiPrompt = `
+                        You are Christopher's Executive Chief of Staff. Review the data below and provide a Daily Summary.
+                        
+                        STYLE REQUIREMENTS:
+                        - Use the exact format of Christopher's previous Zapier agent.
+                        - Sections: 📧 Recent Email Activity, 📅 Today's Calendar Events, ⚠️ SCHEDULING CONFLICT DETECTED, 📋 Action Items.
+                        - Use 🔴 for High Priority items found in emails.
+                        - CRITICAL: Analyze start times and end times. If events overlap OR if an email invitation conflicts with a calendar event, explain the conflict clearly using the 🚨 emoji.
+                        
+                        DATA:
+                        ${calendarContext}
+                        
+                        ${emailContext}
+                    `;
         
-                    const aiBrief = await getAIResponse(aiPrompt);
+                    const aiResponse = await getAIResponse(aiPrompt);
         
-                    // 4. RENDER
+                    // 4. CALENDAR VIEW LOGIC (Next 24h OR 6 events)
+                    const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+                    const filteredEvents = (calendar.result.items || []).filter(e => !completedTitles.includes(e.summary.toLowerCase().trim()));
+                    const next24h = filteredEvents.filter(e => new Date(e.start.dateTime || e.start.date) <= tomorrow);
+                    const displayEvents = next24h.length >= 6 ? next24h : filteredEvents.slice(0, 6);
+        
+                    // 5. RENDER
                     container.innerHTML = `
                         <section class="animate-fade-in">
-                            <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4 text-center">Strategic Intelligence</h2>
                             <div class="paul-weiss-container prose prose-sm max-w-none">
-                                ${marked.parse(aiBrief)}
+                                ${marked.parse(aiResponse)}
                             </div>
                         </section>
         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
                             <section>
-                                <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Unique Schedule</h2>
+                                <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Verified Schedule</h2>
                                 <div class="space-y-4">
-                                    ${strategicEvents.map(e => `
+                                    ${displayEvents.map(e => `
                                         <div class="flex justify-between items-center">
                                             <div class="flex flex-col">
                                                 <span class="text-[8px] font-bold text-gray-400 uppercase">${new Date(e.start.dateTime || e.start.date).toLocaleDateString([], {month:'short', day:'numeric'})}</span>
                                                 <span class="text-[9px] text-gray-400">${e.start.dateTime ? new Date(e.start.dateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'All Day'}</span>
                                             </div>
-                                            <span class="font-semibold text-sm text-[#1D3557] text-right">${e.summary}</span>
+                                            <div class="text-right">
+                                                <p class="font-semibold text-sm text-[#1D3557]">${e.summary}</p>
+                                                <p class="text-[9px] text-gray-400">${e.location || ''}</p>
+                                            </div>
                                         </div>`).join('')}
                                 </div>
                             </section>
                             <section>
-                                <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Pending Tasks</h2>
-                                <div class="space-y-3">
-                                    ${allTasks.filter(t => t.status !== 'completed').map(t => `<div class="p-2 bg-white border border-gray-100 text-[10px] font-medium text-gray-700">${t.title}</div>`).join('')}
+                                <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Unfinished Tasks</h2>
+                                <div class="space-y-2">
+                                    ${allTasks.filter(t => t.status !== 'completed').map(t => `<div class="p-3 bg-white border border-gray-100 text-[10px] font-medium text-gray-700">${t.title}</div>`).join('')}
                                 </div>
                             </section>
                         </div>
