@@ -3,219 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v4.9</title>
-    
+    <title>LionMail Helper v5.1</title>
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-    
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #fcfcfc; color: #111111; }
         h1, h2 { font-family: 'Playfair Display', serif; }
-        
-        /* Paul Weiss Executive Styling */
-        .paul-weiss-container {
-            background-color: #ffffff;
-            border-left: 5px solid #1D3557;
-            padding: 2.5rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-        }
-
-        .btn-lionmail { 
-            background-color: #1D3557; 
-            color: white; 
-            transition: all 0.2s; 
-            cursor: pointer; 
-            border-radius: 2px;
-            font-size: 10px;
-            letter-spacing: 0.1em;
-        }
-        .btn-lionmail:hover { background-color: #457B9D; }
-        
-        .animate-fade-in { animation: fadeIn 0.8s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Markdown formatting overrides */
+        .paul-weiss-container { background-color: #ffffff; border-left: 5px solid #1D3557; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
+        .audit-box { border: 1px dashed #e2e8f0; background-color: #f8fafc; padding: 1.2rem; margin-bottom: 0.75rem; transition: transform 0.2s; }
+        .audit-box:hover { transform: scale(1.01); }
         .prose strong { color: #1D3557; font-weight: 700; }
-        .prose h3 { color: #1D3557; margin-top: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="p-4 md:p-12">
+<body class="p-6 md:p-12">
 
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia University • Executive Briefing</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Full-Spectrum Auditor • v5.1</p>
         </div>
         <div class="flex items-center gap-6">
-            <button onclick="resetKeys()" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
+            <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600">Reset System</button>
             <button id="refresh_btn" onclick="runLionMailBriefing()" class="hidden p-2 text-[#1D3557] border border-gray-200 hover:bg-white transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </button>
-            <button id="auth_btn" onclick="handleAuthClick()" class="btn-lionmail px-8 py-3 uppercase font-bold">Secure Connect</button>
+            <button id="auth_btn" onclick="handleAuthClick()" class="bg-[#1D3557] text-white px-8 py-3 text-[10px] uppercase font-bold tracking-widest">Connect</button>
         </div>
     </header>
 
-    <main id="dashboard" class="max-w-4xl mx-auto opacity-20 pointer-events-none transition-all duration-1000">
-        <div id="brief-content" class="space-y-16">
-            <p class="text-center py-40 text-xs italic tracking-[0.5em] uppercase text-gray-300">Awaiting Encrypted Connection...</p>
-        </div>
+    <main id="dashboard" class="max-w-4xl mx-auto opacity-10 pointer-events-none transition-all duration-700">
+        <div id="brief-content" class="space-y-12"></div>
     </main>
 
     <script>
-        /* --- SECURE VAULT --- */
-        function getStoredKey(keyName, promptMsg) {
-            let val = localStorage.getItem(keyName);
-            if (!val || val === "null") {
-                val = prompt(promptMsg);
-                if (val) localStorage.setItem(keyName, val.trim());
-            }
-            return val;
-        }
-
-        function resetKeys() {
-            if(confirm("Wipe local credentials and reset?")) {
-                localStorage.clear();
-                location.reload();
-            }
-        }
-
-        /* --- API CONFIG --- */
         const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
         let tokenClient;
 
-        /* --- AI INTELLIGENCE --- */
-        async function summarizeWithGemini(contextData) {
-            const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key (Personal):");
+        function getStoredKey(k, p) {
+            let v = localStorage.getItem(k);
+            if (!v) { v = prompt(p); if (v) localStorage.setItem(k, v.trim()); }
+            return v;
+        }
+
+        async function getAIResponse(prompt) {
+            const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini Key:");
+            const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+            const listData = await (await fetch(listUrl)).json();
+            const model = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash"))?.name || "models/gemini-1.5-flash";
             
-            // Step 1: Discover available model
-            const listResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-            const listData = await listResponse.json();
-            const bestModel = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash")) || {name: "models/gemini-1.5-flash"};
-
-            // Step 2: Generate Paul Weiss style summary
-            const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel.name}:generateContent?key=${apiKey}`;
-            const prompt = `You are an elite Law School Chief of Staff. Summarize the following data for Christopher.
-            STYLE:
-            - Use EMOJIS for every section.
-            - Format using Markdown (headings, bold, lists).
-            - Look for CONFLICTS between emails and calendar. If found, use the 🚨 emoji and highlight the conflict in bold.
-            - Tone: Sharp, executive, minimalist.
-            DATA:\n${contextData}`;
-
-            const response = await fetch(genUrl, {
+            const genUrl = `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${apiKey}`;
+            const res = await fetch(genUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-            const result = await response.json();
-            return result.candidates[0].content.parts[0].text;
+            const data = await res.json();
+            return data.candidates[0].content.parts[0].text;
         }
 
-        /* --- AUTH FLOW --- */
-        function gapiLoaded() {
-            gapi.load('client', async () => {
-                await gapi.client.init({
-                    discoveryDocs: [
-                        "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
-                        "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-                        "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
-                    ],
-                });
-            });
-        }
-
-        function gisLoaded() {
-            const clientID = getStoredKey('GCP_CLIENT_ID', "Enter Google Client ID (Columbia):");
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: clientID,
-                scope: SCOPES,
-                callback: '', 
-            });
-        }
-
-        function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
+        function gapiLoaded() { gapi.load('client', () => gapi.client.init({ discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest", "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest", "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"] })); }
+        function gisLoaded() { tokenClient = google.accounts.oauth2.initTokenClient({ client_id: getStoredKey('GCP_CLIENT_ID', "Enter Client ID:"), scope: SCOPES, callback: '' }); }
+        
+        function handleAuthClick() { 
+            tokenClient.callback = async (r) => {
                 document.getElementById('auth_btn').classList.add('hidden');
                 document.getElementById('refresh_btn').classList.remove('hidden');
-                document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
-                await runLionMailBriefing();
+                document.getElementById('dashboard').classList.remove('opacity-10', 'pointer-events-none');
+                runLionMailBriefing();
             };
             tokenClient.requestAccessToken({ prompt: 'select_account' });
         }
 
-        /* --- MAIN SYSTEM --- */
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
-            const now = new Date();
-            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Consulting the Sentinel...</p>`;
+            container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest text-gray-400 animate-pulse">Scanning Full Spectrum...</p>`;
 
             try {
-                // Fetch data
-                const [inbox, calendar, tasks] = await Promise.all([
-                    gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread label:inbox' }),
-                    gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': now.toISOString(), 'singleEvents': true, 'maxResults': 10 }),
-                    gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': false })
+                const now = new Date();
+                const [inbox, calendar, tasks, scheduled] = await Promise.all([
+                    gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
+                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 15 }),
+                    gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: false }),
+                    gapi.client.gmail.users.messages.list({ userId: 'me', q: 'label:scheduled' })
                 ]);
 
-                // Context Preparation
-                let contextString = "INBOX:\n";
+                // 1. DATA PREP
+                let inboxText = (inbox.result.messages || []).length > 0 ? "EMAILS:\n" : "NO NEW EMAILS";
                 if (inbox.result.messages) {
-                    const msgs = await Promise.all(inbox.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ 'userId': 'me', 'id': m.id })));
-                    contextString += msgs.map(m => `- From: ${m.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${m.result.payload.headers.find(h=>h.name==='Subject').value}\nSnippet: ${m.result.snippet}`).join("\n");
+                    const details = await Promise.all(inbox.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                    inboxText += details.map(d => `- From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join("\n");
                 }
-                
-                contextString += "\n\nCALENDAR:\n" + (calendar.result.items || []).map(e => `- ${e.summary} [${e.start.dateTime || e.start.date}]`).join("\n");
-                contextString += "\n\nTASKS:\n" + (tasks.result.items || []).map(t => `- ${t.title}`).join("\n");
 
-                // AI Processing
-                const aiMarkdown = await summarizeWithGemini(contextString);
-                const aiHTML = marked.parse(aiMarkdown);
+                const calArray = (calendar.result.items || []).map(e => `${e.summary} on ${e.start.dateTime || e.start.date}`);
+                const calText = "\n\nCALENDAR:\n" + calArray.join('\n');
 
-                // UI Rendering
+                // 2. MAIN BRIEFING (With Overlap Check)
+                const mainBriefPrompt = `You are a Law School Chief of Staff. Summarize these emails and calendar events for Christopher. 
+                STYLE: Paul Weiss Executive, Use Emojis.
+                CRITICAL: If an email mentions an event date/time that conflicts with a calendar event, flag it immediately with 🚨 CONFLICT.
+                CONTEXT:\n${inboxText}${calText}`;
+                const aiBrief = await getAIResponse(mainBriefPrompt);
+
+                // 3. SCHEDULED AUDIT
+                let scheduledAuditHtml = "";
+                if (scheduled.result.messages) {
+                    scheduledAuditHtml = `<section class="animate-fade-in"><h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4">Scheduled Outreach Quality Control</h2><div class="grid grid-cols-1 gap-2">`;
+                    const details = await Promise.all(scheduled.result.messages.map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                    
+                    for (let msg of details) {
+                        const to = msg.result.payload.headers.find(h => h.name === 'To')?.value || "Unknown";
+                        const body = msg.result.snippet;
+                        const audit = await getAIResponse(`Audit this scheduled email for Christopher. Output ONLY 1 sentence starting with a check or x. Check for typos and wrong firm names. To: ${to} | Body: ${body}`);
+                        const isError = audit.includes('❌') || audit.toLowerCase().includes('typo') || audit.toLowerCase().includes('wrong');
+                        
+                        scheduledAuditHtml += `
+                            <div class="audit-box flex justify-between items-center border ${isError ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-white'}">
+                                <div class="text-[11px] leading-tight flex-1 pr-4">
+                                    <span class="font-bold text-[#1D3557]">To: ${to}</span> — <span class="text-gray-600">${audit}</span>
+                                </div>
+                                <span class="text-sm font-bold">${isError ? '🚨' : '✅'}</span>
+                            </div>`;
+                    }
+                    scheduledAuditHtml += `</div></section>`;
+                }
+
+                // RENDER
                 container.innerHTML = `
                     <section class="animate-fade-in">
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center">Executive Intelligence</h2>
-                        <div class="paul-weiss-container prose prose-sm max-w-none">
-                            ${aiHTML}
-                        </div>
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4 text-center">Executive Intelligence</h2>
+                        <div class="paul-weiss-container prose prose-sm max-w-none">${marked.parse(aiBrief)}</div>
                     </section>
 
+                    ${scheduledAuditHtml}
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-                        <section class="animate-fade-in" style="animation-delay: 0.2s">
+                        <section>
                             <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Verified Schedule</h2>
                             <div class="space-y-4">
                                 ${(calendar.result.items || []).map(e => `
-                                    <div class="flex justify-between items-start">
-                                        <span class="text-[9px] font-bold text-gray-400 mt-1 uppercase w-20">
-                                            ${new Date(e.start.dateTime || e.start.date).toLocaleDateString([], {month:'short', day:'numeric'})}
-                                        </span>
-                                        <span class="text-sm font-semibold text-[#1D3557] flex-1">${e.summary}</span>
-                                    </div>
-                                `).join('')}
+                                    <div class="flex justify-between items-center">
+                                        <div class="flex flex-col">
+                                            <span class="text-[8px] font-bold text-gray-400 uppercase">${new Date(e.start.dateTime || e.start.date).toLocaleDateString([], {weekday: 'short', month:'short', day:'numeric'})}</span>
+                                            <span class="text-[9px] text-gray-400">${e.start.dateTime ? new Date(e.start.dateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'All Day'}</span>
+                                        </div>
+                                        <span class="font-semibold text-sm text-[#1D3557] text-right">${e.summary}</span>
+                                    </div>`).join('')}
                             </div>
                         </section>
-
-                        <section class="animate-fade-in" style="animation-delay: 0.4s">
+                        <section>
                             <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Pending Matters</h2>
                             <div class="space-y-3">
-                                ${(tasks.result.items || []).map(t => `
-                                    <div class="flex items-center gap-4 text-xs font-medium text-gray-600 p-2 bg-white border border-gray-100">
-                                        <div class="w-1.5 h-1.5 bg-gray-300"></div>
-                                        ${t.title}
-                                    </div>
-                                `).join('')}
+                                ${(tasks.result.items || []).map(t => `<div class="p-3 bg-white border border-gray-100 text-[11px] font-medium text-gray-700 flex items-center gap-3"><div class="w-1 h-1 bg-gray-400"></div>${t.title}</div>`).join('')}
                             </div>
                         </section>
                     </div>
                 `;
-
-            } catch (err) {
-                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">System Failure: Check Console for Diagnostics</div>`;
-                console.error(err);
-            }
+            } catch (err) { console.error(err); container.innerHTML = `<p class="text-red-500 text-center uppercase tracking-widest text-[10px] font-bold">Audit Failure: Check Google Console</p>`; }
         }
     </script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
