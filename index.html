@@ -70,41 +70,48 @@
     async function summarizeWithGemini(emailText) {
         const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini Key:");
         
-        // Switch to the stable v1/gemini-pro endpoint
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
-        
-        const requestBody = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": `You are a Law School Chief of Staff. Summarize these emails for Christopher. Identify deadlines and pickup locations. Tone: Minimalist. Emails:\n${emailText}`}
-                    ]
-                }
-            ]
-        };
-    
         try {
-            const response = await fetch(url, {
+            // 1. CALL LISTMODELS TO SEE WHAT YOU ACTUALLY HAVE
+            const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+            const listResponse = await fetch(listUrl);
+            const listData = await listResponse.json();
+    
+            if (listData.error) {
+                return `API Key Error: ${listData.error.message}`;
+            }
+    
+            // 2. FIND A MODEL THAT SUPPORTS "generateContent"
+            // We look for gemini-2.5-flash (the 2026 standard) or any available flash/pro model
+            const availableModels = listData.models || [];
+            const bestModel = availableModels.find(m => 
+                m.supportedGenerationMethods.includes("generateContent") && 
+                (m.name.includes("flash") || m.name.includes("pro"))
+            );
+    
+            if (!bestModel) {
+                console.log("Full Model List:", availableModels);
+                return "No compatible models found for this API key.";
+            }
+    
+            console.log("Using Model:", bestModel.name);
+    
+            // 3. RUN THE SUMMARY WITH THE DISCOVERED MODEL
+            const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel.name}:generateContent?key=${apiKey}`;
+            
+            const response = await fetch(genUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: `Summarize these Law School emails for Christopher: ${emailText}` }] }]
+                })
             });
     
             const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
     
-            if (data.error) {
-                console.error("Gemini Error:", data.error);
-                return `AI Error ${data.error.code}: ${data.error.message}`;
-            }
-    
-            // Gemini-Pro response structure check
-            if (data.candidates && data.candidates[0].content) {
-                return data.candidates[0].content.parts[0].text;
-            } else {
-                return "AI returned an empty response. Try refreshing.";
-            }
         } catch (e) {
-            return "Network Error: Unable to reach Gemini.";
+            console.error(e);
+            return "System Error: Check browser console (F12).";
         }
     }
     
