@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v7.0 | Executive Sentinel</title>
+    <title>LionMail Helper v7.5 | Executive Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -13,6 +13,7 @@
         body { font-family: 'Inter', sans-serif; background-color: #fcfcfc; color: #111111; }
         h1, h2 { font-family: 'Playfair Display', serif; }
         .paul-weiss-container { background-color: #ffffff; border-left: 5px solid #1D3557; padding: 2.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
+        .schedule-block { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 1.5rem; margin-top: 2rem; }
         .time-card { display: flex; align-items: center; gap: 1.5rem; padding: 1rem 0; border-bottom: 1px solid #f0f0f0; }
         .time-meta { min-width: 85px; text-align: right; }
         .event-details { flex: 1; }
@@ -29,7 +30,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Sentinel v7.0</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v7.5</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -43,8 +44,8 @@
     </header>
 
     <main id="dashboard" class="max-w-4xl mx-auto opacity-20 pointer-events-none transition-all duration-1000">
-        <div id="brief-content" class="space-y-16">
-            <p class="text-center py-40 text-xs italic tracking-[0.5em] uppercase text-gray-300">Awaiting Encrypted Connection...</p>
+        <div id="brief-content" class="space-y-8">
+            <p id="loading-text" class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-300 animate-pulse">Awaiting Connection...</p>
         </div>
     </main>
 
@@ -107,17 +108,24 @@
 
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
-            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Consulting the Sentinel...</p>`;
+            const loadingOptions = [
+                "Briefing the Chief of Staff...",
+                "Analyzing Law School Logistics...",
+                "Synthesizing Executive Briefing..."
+            ];
+            const randomLoading = loadingOptions[Math.floor(Math.random() * loadingOptions.length)];
+            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">${randomLoading}</p>`;
 
             try {
                 const now = new Date();
                 const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
                 const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-                const [inbox, calendar, tasks] = await Promise.all([
+                const [inbox, calendar, tasks, drafts] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
                     gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
-                    gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true })
+                    gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true }),
+                    gapi.client.gmail.users.drafts.list({ userId: 'me' })
                 ]);
 
                 const allTasks = tasks.result.items || [];
@@ -128,8 +136,15 @@
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
                     location: e.location || "",
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} @ ${e.location || 'No Location Provided'}`
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} @ ${e.location || 'Unknown'}`
                 }));
+
+                // Fetch Drafts/Scheduled context
+                let draftContext = "None detected.";
+                if (drafts.result.drafts) {
+                    const draftDetails = await Promise.all(drafts.result.drafts.slice(0, 5).map(d => gapi.client.gmail.users.drafts.get({ userId: 'me', id: d.id })));
+                    draftContext = draftDetails.map(d => `Subj: ${d.result.message.payload.headers.find(h=>h.name==='Subject')?.value || 'No Subject'} | Snippet: ${d.result.message.snippet}`).join('\n');
+                }
 
                 let emailContext = "";
                 if (inbox.result.messages) {
@@ -137,7 +152,7 @@
                     emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
                 }
 
-                const aiPrompt = `You are Christopher's Chief of Staff. DATE: ${dateString}.
+                const briefingPrompt = `You are Christopher's Chief of Staff. DATE: ${dateString}.
                 
                 STRUCTURE:
                 Daily Summary - [Date]
@@ -148,22 +163,33 @@
                 🌟 Future Highlights
 
                 STRATEGIC FILTERING:
-                1. 48-HOUR FOCUS: Detail granularity for today/tomorrow only.
-                2. NO LOCATION ASSUMPTIONS: If an event has no location, do not assume it is "On Campus". Treat it as unknown.
-                3. TASK SYNC: Do NOT remind the user about these COMPLETED tasks: [${completedTaskTitles.join(', ')}]. Only suggest actions for new or pending items.
-                4. TRAVEL: Only warn about transitions if events overlap or have <30 mins between different defined locations.
-                5. HOLIDAYS: Only mention upcoming holidays (e.g., MLK, Veterans) if they are in the next 7 days or require immediate planning/awareness.
+                1. 48-HOUR FOCUS.
+                2. NO LOCATION ASSUMPTIONS.
+                3. TASK SYNC: Ignore completed tasks: [${completedTaskTitles.join(', ')}].
+                4. HOLIDAYS: Only mention if in the next 7 days.
 
-                DATA:
+                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}`;
+
+                const schedulingPrompt = `You are Christopher's Chief of Staff. Review these pending/draft emails against his calendar and current date (${dateString}).
+                
+                DRAFTS/SCHEDULED:\n${draftContext}
                 CALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}
-                EMAILS:\n${emailContext}
-                PENDING TASKS:\n${pendingTasks.map(t => t.title).join('\n')}`;
 
-                const aiBriefing = await getAIResponse(aiPrompt);
+                TASK: If these emails mention specific dates/times, verify they don't conflict. If they are just drafts, note if they are "Good to Go" based on current context. Keep it brief. Use "✅ Good to Go" or "⚠️ Requires Review".`;
+
+                const [aiBriefing, aiScheduling] = await Promise.all([
+                    getAIResponse(briefingPrompt),
+                    getAIResponse(schedulingPrompt)
+                ]);
 
                 container.innerHTML = `
                     <section class="animate-fade-in">
                         <div class="paul-weiss-container prose prose-sm max-w-none">${marked.parse(aiBriefing)}</div>
+                    </section>
+
+                    <section class="schedule-block animate-fade-in prose prose-sm max-w-none">
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4 pb-2 border-b">Outgoing Correspondence Audit</h2>
+                        ${marked.parse(aiScheduling)}
                     </section>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
@@ -188,13 +214,13 @@
                                 ${pendingTasks.length > 0 ? pendingTasks.map(t => `
                                     <div class="p-4 bg-white border border-gray-100 text-[11px] font-medium text-gray-700 flex items-center gap-4">
                                         <div class="w-1.5 h-1.5 bg-gray-300"></div> ${t.title}
-                                    </div>`).join('') : '<p class="text-xs text-gray-400 italic">No pending tasks.</p>'}
+                                    </div>`).join('') : '<p class="text-xs text-gray-400 italic">Clear desk.</p>'}
                             </div>
                         </section>
                     </div>`;
             } catch (err) {
                 console.error(err);
-                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Error: Check Console</div>`;
+                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">Chief of Staff Sync Error</div>`;
             }
         }
     </script>
