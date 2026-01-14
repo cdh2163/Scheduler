@@ -12,41 +12,11 @@
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #fcfcfc; color: #111111; }
         h1, h2 { font-family: 'Playfair Display', serif; }
-        
-        .paul-weiss-container {
-            background-color: #ffffff;
-            border-left: 5px solid #1D3557;
-            padding: 2.5rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-        }
-
-        .time-card {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-            padding: 1rem 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        .time-meta {
-            min-width: 85px;
-            text-align: right;
-        }
-        .event-details {
-            flex: 1;
-        }
-
-        .btn-primary { 
-            background-color: #1D3557; 
-            color: white; 
-            border-radius: 2px;
-            font-size: 10px;
-            letter-spacing: 0.1em;
-            transition: all 0.2s;
-        }
-        .btn-primary:hover { background-color: #457B9D; }
-        
-        .prose h2 { font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: #1D3557; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem; }
-        .prose strong { color: #1D3557; font-weight: 700; }
+        .paul-weiss-container { background-color: #ffffff; border-left: 5px solid #1D3557; padding: 2.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
+        .time-card { display: flex; align-items: center; gap: 1.5rem; padding: 1rem 0; border-bottom: 1px solid #f0f0f0; }
+        .time-meta { min-width: 85px; text-align: right; }
+        .btn-primary { background-color: #1D3557; color: white; border-radius: 2px; font-size: 10px; letter-spacing: 0.1em; }
+        .prose h2 { font-size: 1.25rem; margin-top: 1.5rem; color: #1D3557; border-bottom: 1px solid #e2e8f0; }
         .animate-fade-in { animation: fadeIn 0.8s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -60,16 +30,14 @@
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
-            <button id="refresh_btn" onclick="runLionMailBriefing()" class="hidden p-2 text-[#1D3557] border border-gray-200 hover:bg-white transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+            <button id="refresh_btn" onclick="runLionMailBriefing()" class="hidden p-2 text-[#1D3557] border border-gray-200 hover:bg-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </button>
             <button id="auth_btn" onclick="handleAuthClick()" class="btn-primary px-8 py-3 uppercase font-bold">Secure Connect</button>
         </div>
     </header>
 
-    <main id="dashboard" class="max-w-4xl mx-auto opacity-20 pointer-events-none transition-all duration-1000">
+    <main id="dashboard" class="max-w-4xl mx-auto opacity-20 pointer-events-none transition-all">
         <div id="brief-content" class="space-y-16">
             <p class="text-center py-40 text-xs italic tracking-[0.5em] uppercase text-gray-300">Awaiting Secure Handshake...</p>
         </div>
@@ -87,15 +55,14 @@
 
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
-            // Standardizing to the v1beta endpoint for maximum reliability
             const genUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(genUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-            if (!response.ok) throw new Error('AI Service Unavailable');
             const data = await response.json();
+            if (data.error) throw new Error(`AI Error: ${data.error.message}`);
             return data.candidates[0].content.parts[0].text;
         }
 
@@ -103,13 +70,15 @@
         let tokenClient;
 
         function gapiLoaded() {
-            gapi.load('client', () => gapi.client.init({
-                discoveryDocs: [
-                    "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
-                    "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-                    "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
-                ],
-            }));
+            gapi.load('client', () => {
+                gapi.client.init({
+                    discoveryDocs: [
+                        "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
+                        "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
+                        "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
+                    ],
+                }).catch(err => console.error("GAPI Init Error:", err));
+            });
         }
 
         function gisLoaded() {
@@ -121,18 +90,14 @@
         }
 
         function handleAuthClick() {
-            try {
-                tokenClient.callback = async (resp) => {
-                    if (resp.error) throw resp;
-                    document.getElementById('auth_btn').classList.add('hidden');
-                    document.getElementById('refresh_btn').classList.remove('hidden');
-                    document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
-                    runLionMailBriefing();
-                };
-                tokenClient.requestAccessToken({ prompt: 'select_account' });
-            } catch (e) {
-                alert("Auth failed. Check if you are using HTTPS or localhost.");
-            }
+            tokenClient.callback = async (resp) => {
+                if (resp.error) { console.error("Auth Error:", resp); return; }
+                document.getElementById('auth_btn').classList.add('hidden');
+                document.getElementById('refresh_btn').classList.remove('hidden');
+                document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
+                runLionMailBriefing();
+            };
+            tokenClient.requestAccessToken({ prompt: 'select_account' });
         }
 
         async function runLionMailBriefing() {
@@ -142,119 +107,52 @@
             try {
                 const now = new Date();
                 const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
-                const dateString = now.toLocaleDateString('en-US', { 
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-                });
+                const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+                // Fetch Data
                 const [inbox, calendar, tasks] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
-                    gapi.client.calendar.events.list({ 
-                        calendarId: 'primary', 
-                        timeMin: now.toISOString(), 
-                        singleEvents: true, 
-                        orderBy: 'startTime',
-                        maxResults: 60 
-                    }),
-                    gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true })
+                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
+                    gapi.client.tasks.tasks.list({ tasklist: '@default' })
                 ]);
 
-                const allTasks = tasks.result.items || [];
-                const completedTitles = allTasks.filter(t => t.status === 'completed').map(t => t.title.toLowerCase().trim());
-
-                const activeEvents = (calendar.result.items || []).filter(e => {
-                    return !completedTitles.includes(e.summary.toLowerCase().trim());
-                }).map(e => ({
+                const activeEvents = (calendar.result.items || []).map(e => ({
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
-                    end: new Date(e.end.dateTime || e.end.date),
                     location: e.location || "",
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} to ${e.end.dateTime || e.end.date} at ${e.location || 'NONE SPECIFIED'}`
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} at ${e.location || 'NONE SPECIFIED'}`
                 }));
 
                 let emailContext = "";
                 if (inbox.result.messages) {
-                    const details = await Promise.all(inbox.result.messages.slice(0, 10).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
-                    emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
+                    const details = await Promise.all(inbox.result.messages.slice(0, 8).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                    emailContext = details.map(d => `Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
                 }
 
-                const aiPrompt = `
-                    You are Christopher's Chief of Staff. 
-                    CURRENT SYSTEM DATE: ${dateString}.
-                    
-                    OUTPUT STRUCTURE:
-                    Daily Summary - [Current Day and Date]
-                    📧 Recent Email Activity
-                    - Group into "🔴 High Priority" and "Upcoming Events from Emails".
-                    
-                    📅 Today's Calendar Events
-                    - List events for the next 24 hours only. Show times and locations.
-                    
-                    ⚠️ SCHEDULING CONFLICT DETECTED
-                    - Compare start/end times and locations for the next 48 hours. 
-                    - Use 🚨 for overlaps or travel issues.
-                    - TRAVEL LOGIC: If location is "NONE SPECIFIED", assume it is on-campus and requires a 10-minute transition. Only flag if the gap is less than 10 minutes.
-                    - If locations are different, require a 30-minute buffer.
-                    
-                    📋 Action Items
-                    - Extract specific tasks from the emails and calendar conflicts.
-
-                    STRATEGIC FILTERING:
-                    1. 48-HOUR FOCUS: Only provide granular time/travel details for today and tomorrow.
-                    2. HOLIDAYS & SIGNALS: Scan for Holidays (MANDATORY: Flag MLK Day if it appears) or unique "one-off" events. Highlight these in a "Future Highlights" section.
-                    3. NOISE REDUCTION: Do NOT list recurring classes (Torts, Tax, etc.) if they occur more than 48 hours from now.
-
-                    DATA:
-                    CALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}
-                    EMAILS:\n${emailContext}
-                `;
+                const aiPrompt = `Review these for Christopher for ${dateString}. Format as a Chief of Staff Briefing. 
+                1. 48-hour focus only. 
+                2. If location is NONE SPECIFIED, assume on-campus (10 min buffer). 
+                3. Flag MLK Day or other major holidays/one-offs in a "Future Highlights" section. 
+                4. Do NOT list recurring classes past 48 hours. 
+                \nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}`;
 
                 const aiBriefing = await getAIResponse(aiPrompt);
 
-                const displayEvents = activeEvents.filter(e => e.start <= tomorrow).length >= 6 
-                    ? activeEvents.filter(e => e.start <= tomorrow) 
-                    : activeEvents.slice(0, 6);
-
                 container.innerHTML = `
-                    <section class="animate-fade-in">
-                        <div class="paul-weiss-container prose prose-sm max-w-none">
-                            ${marked.parse(aiBriefing)}
-                        </div>
-                    </section>
-
+                    <div class="paul-weiss-container prose prose-sm max-w-none animate-fade-in">${marked.parse(aiBriefing)}</div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
                         <section>
                             <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Verified Schedule</h2>
-                            <div class="space-y-1">
-                                ${displayEvents.map(e => `
-                                    <div class="time-card">
-                                        <div class="time-meta">
-                                            <p class="text-[10px] font-bold text-[#1D3557] uppercase">${e.start.toLocaleDateString([], {month:'short', day:'numeric'})}</p>
-                                            <p class="text-[9px] text-gray-400 font-medium italic">${e.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                                        </div>
-                                        <div class="event-details">
-                                            <p class="text-sm font-bold text-[#1D3557] leading-tight">${e.summary}</p>
-                                            ${e.location ? `<p class="text-[10px] text-red-700 font-semibold uppercase tracking-tighter">📍 ${e.location}</p>` : ''}
-                                        </div>
-                                    </div>`).join('')}
-                            </div>
+                            ${activeEvents.filter(e => e.start <= tomorrow).map(e => `
+                                <div class="time-card">
+                                    <div class="time-meta"><p class="text-[10px] font-bold text-[#1D3557]">${e.start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p></div>
+                                    <div class="event-details"><p class="text-sm font-bold text-[#1D3557]">${e.summary}</p>${e.location ? `<p class="text-[10px] text-red-700">📍 ${e.location}</p>` : ''}</div>
+                                </div>`).join('')}
                         </section>
-
-                        <section>
-                            <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Pending Matters</h2>
-                            <div class="space-y-3">
-                                ${allTasks.filter(t => t.status !== 'completed').map(t => `
-                                    <div class="p-4 bg-white border border-gray-100 text-[11px] font-medium text-gray-700 flex items-center gap-4">
-                                        <div class="w-1.5 h-1.5 bg-gray-300"></div>
-                                        ${t.title}
-                                    </div>`).join('')}
-                            </div>
-                        </section>
-                    </div>
-                `;
-
+                    </div>`;
             } catch (err) {
-                console.error(err);
-                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">Chief of Staff: System Sync Error</div>`;
+                console.error("CRITICAL SYNC ERROR:", err);
+                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Error: ${err.message}</div>`;
             }
         }
     </script>
