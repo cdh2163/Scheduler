@@ -67,52 +67,41 @@
     let gisInited = false;
     
     /* --- AI ENGINE (v4.4 Improved) --- */
-    async function summarizeWithGemini(emailText) {
+    async function summarizeWithGemini(combinedData) {
         const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini Key:");
+        const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+        const listResponse = await fetch(listUrl);
+        const listData = await listResponse.json();
         
-        try {
-            // 1. CALL LISTMODELS TO SEE WHAT YOU ACTUALLY HAVE
-            const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-            const listResponse = await fetch(listUrl);
-            const listData = await listResponse.json();
+        // Auto-select model (v4.7 logic)
+        const bestModel = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash")) || {name: "models/gemini-1.5-flash"};
     
-            if (listData.error) {
-                return `API Key Error: ${listData.error.message}`;
-            }
-    
-            // 2. FIND A MODEL THAT SUPPORTS "generateContent"
-            // We look for gemini-2.5-flash (the 2026 standard) or any available flash/pro model
-            const availableModels = listData.models || [];
-            const bestModel = availableModels.find(m => 
-                m.supportedGenerationMethods.includes("generateContent") && 
-                (m.name.includes("flash") || m.name.includes("pro"))
-            );
-    
-            if (!bestModel) {
-                console.log("Full Model List:", availableModels);
-                return "No compatible models found for this API key.";
-            }
-    
-            console.log("Using Model:", bestModel.name);
-    
-            // 3. RUN THE SUMMARY WITH THE DISCOVERED MODEL
-            const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel.name}:generateContent?key=${apiKey}`;
+        const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel.name}:generateContent?key=${apiKey}`;
+        
+        // THE "ZAPIER/PAUL WEISS" PROMPT
+        const prompt = `
+            You are an elite Law School Chief of Staff. Summarize the following data for Christopher.
             
-            const response = await fetch(genUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: `Summarize these Law School emails for Christopher: ${emailText}` }] }]
-                })
-            });
+            STYLE GUIDELINES:
+            - Use EMOJIS for every section.
+            - Tone: Minimalist, "Paul Weiss" executive style, sharp, and helpful.
+            - Format: Bold key names and locations.
+            - IMPORTANT: Check for "Calendar Conflicts." If an email mentions an event (like an offer dinner) that overlaps with an existing calendar event, flag it as a "🚨 CONFLICT."
+            
+            DATA TO PROCESS:
+            ${combinedData}
+        `;
     
-            const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
+        const response = await fetch(genUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
     
-        } catch (e) {
-            console.error(e);
-            return "System Error: Check browser console (F12).";
-        }
+        const data = await response.json();
+        return data.candidates[0].content.parts[0].text;
     }
     
     // ... Keep your existing gapiLoaded, gisLoaded, and handleAuthClick functions ...
@@ -151,71 +140,44 @@
         /* --- CORE BRIEFING --- */
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
-            const now = new Date();
-            const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">AI Synthesis in Progress (${timestamp})...</p>`;
-
-            async function safeFetch(req) { try { const r = await req; return r.result; } catch(e) { return {}; } }
-
+            container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Analyzing Schedule & Inbox...</p>`;
+        
             try {
-                const [inbox, scheduled, calendar, tasks] = await Promise.all([
-                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread label:inbox' })),
-                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'label:scheduled' })),
-                    safeFetch(gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': now.toISOString(), 'singleEvents': true, 'orderBy': 'startTime', 'maxResults': 15 })),
-                    safeFetch(gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': true, 'showHidden': true }))
+                const now = new Date();
+                const [inbox, calendar, tasks] = await Promise.all([
+                    gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread label:inbox' }),
+                    gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': now.toISOString(), 'singleEvents': true, 'maxResults': 10 }),
+                    gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': false })
                 ]);
-
-                let aiSummary = "Your inbox is clear.";
-                if (inbox.messages && inbox.messages.length > 0) {
-                    const details = await Promise.all(inbox.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ 'userId': 'me', 'id': m.id })));
-                    const text = details.map(d => {
-                        const subject = d.result.payload.headers.find(h => h.name === 'Subject').value;
-                        return `Subject: ${subject}\nSnippet: ${d.result.snippet}`;
-                    }).join("\n---\n");
-                    aiSummary = await summarizeWithGemini(text);
+        
+                // 1. Prepare Email Snippets
+                let emailText = "EMAILS:\n";
+                if (inbox.result.messages) {
+                    const details = await Promise.all(inbox.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ 'userId': 'me', 'id': m.id })));
+                    emailText += details.map(d => `- From: ${d.result.payload.headers.find(h => h.name === 'From').value} | Subject: ${d.result.payload.headers.find(h => h.name === 'Subject').value} | Snippet: ${d.result.snippet}`).join("\n");
                 }
-
-                const completed = (tasks.items || []).filter(t => t.status === 'completed').map(t => (t.title || "").toLowerCase());
-                const agenda = (calendar.items || []).filter(e => {
-                    const t = (e.summary || "").toLowerCase();
-                    const isGhost = completed.some(ct => ct !== "" && t.includes(ct));
-                    const isException = t.includes("exam") || t.includes("holiday") || t.includes("no class");
-                    return (!e.recurringEventId && !isGhost) || isException;
-                });
-
+        
+                // 2. Prepare Calendar Events
+                let calText = "\n\nCALENDAR:\n";
+                calText += (calendar.result.items || []).map(e => `- ${e.summary} at ${e.start.dateTime || e.start.date}`).join("\n");
+        
+                // 3. Prepare Tasks
+                let taskText = "\n\nTASKS:\n";
+                taskText += (tasks.result.items || []).map(t => `- ${t.title}`).join("\n");
+        
+                // 4. Send ALL to Gemini
+                const finalSummary = await summarizeWithGemini(emailText + calText + taskText);
+        
+                // 5. Render to UI
                 container.innerHTML = `
-                    <div class="text-center -mb-8 text-[9px] uppercase tracking-widest text-gray-300 font-bold">Updated: ${timestamp}</div>
-
-                    <section class="text-center animate-fade-in">
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4">Executive Briefing</h2>
-                        <div class="p-10 bg-gray-50 border border-gray-100 italic text-sm text-gray-700 leading-relaxed font-serif shadow-sm">
-                            <div class="mb-6 text-left whitespace-pre-line">${aiSummary}</div>
-                            <div class="border-t border-gray-200 pt-6 not-italic font-sans text-[10px] tracking-[0.2em] text-gray-400 uppercase font-bold">Logistics</div>
-                            <p class="mt-2 text-gray-600">No calendar conflicts. ${scheduled.messages ? 'Scheduled outreach is active.' : 'No scheduled mail.'}</p>
-                        </div>
-                    </section>
-
-                    <section class="animate-fade-in">
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center">Unique Events</h2>
-                        <div class="space-y-4">
-                            ${agenda.length > 0 ? agenda.map(e => `
-                                <div class="flex justify-between items-center border-b border-gray-50 pb-3">
-                                    <span class="text-[10px] font-bold text-gray-400 uppercase">${new Date(e.start.dateTime || e.start.date).toLocaleDateString('en-US', {month:'short', day:'numeric'})}</span>
-                                    <span class="text-sm font-semibold text-[#1D3557] text-right">${e.summary}</span>
-                                </div>
-                            `).join('') : '<p class="text-xs italic text-center text-gray-400 py-4">No unique exceptions found.</p>'}
-                        </div>
-                    </section>
-
-                    <section class="animate-fade-in">
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-[#1D3557] mb-6 text-center">Action Items</h2>
-                        <div class="grid grid-cols-1 gap-3">
-                            ${(tasks.items || []).filter(t => t.status !== 'completed').map(t => `<div class="p-4 bg-white border border-gray-100 text-sm text-center font-medium">${t.title}</div>`).join('')}
-                        </div>
-                    </section>
+                    <div class="paul-weiss-text bg-gray-50 p-8 border border-gray-200 shadow-sm animate-fade-in">
+                        <div class="whitespace-pre-line">${finalSummary}</div>
+                    </div>
                 `;
+        
             } catch (err) {
-                container.innerHTML = `<p class="p-10 text-center text-xs text-red-500 font-bold uppercase">Update Failed: Check Keys</p>`;
+                console.error(err);
+                container.innerHTML = `<p class="text-red-500">Error bundling data. Check console.</p>`;
             }
         }
     </script>
