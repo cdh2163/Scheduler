@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v6.9 | Executive Sentinel</title>
+    <title>LionMail Helper v7.0 | Executive Sentinel</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -29,7 +29,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Sentinel v6.9</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Sentinel v7.0</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -121,11 +121,14 @@
                 ]);
 
                 const allTasks = tasks.result.items || [];
+                const completedTaskTitles = allTasks.filter(t => t.status === 'completed').map(t => t.title);
+                const pendingTasks = allTasks.filter(t => t.status !== 'completed');
+
                 const activeEvents = (calendar.result.items || []).map(e => ({
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
-                    location: e.location || "Campus",
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} @ ${e.location || 'Campus'}`
+                    location: e.location || "",
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} @ ${e.location || 'No Location Provided'}`
                 }));
 
                 let emailContext = "";
@@ -140,17 +143,21 @@
                 Daily Summary - [Date]
                 📧 Recent Email Activity (🔴 High Priority)
                 📅 Today's Calendar (Next 24h)
-                ⚠️ SCHEDULING CONFLICT DETECTED (Only if tight/overlapping)
+                ⚠️ SCHEDULING CONFLICT DETECTED
                 📋 Action Items
                 🌟 Future Highlights
 
                 STRATEGIC FILTERING:
-                1. 48-hour focus.
-                2. NO travel details unless there's a genuine conflict or <30 min between locations.
-                3. HOLIDAYS: Only mention upcoming holidays if they are relevant to immediate planning (next 7 days) or important for the user to know. Do not list a generic calendar of holidays.
-                4. Focus only on unique events or critical deadlines in Future Highlights.
+                1. 48-HOUR FOCUS: Detail granularity for today/tomorrow only.
+                2. NO LOCATION ASSUMPTIONS: If an event has no location, do not assume it is "On Campus". Treat it as unknown.
+                3. TASK SYNC: Do NOT remind the user about these COMPLETED tasks: [${completedTaskTitles.join(', ')}]. Only suggest actions for new or pending items.
+                4. TRAVEL: Only warn about transitions if events overlap or have <30 mins between different defined locations.
+                5. HOLIDAYS: Only mention upcoming holidays (e.g., MLK, Veterans) if they are in the next 7 days or require immediate planning/awareness.
 
-                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}`;
+                DATA:
+                CALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}
+                EMAILS:\n${emailContext}
+                PENDING TASKS:\n${pendingTasks.map(t => t.title).join('\n')}`;
 
                 const aiBriefing = await getAIResponse(aiPrompt);
 
@@ -170,7 +177,7 @@
                                     </div>
                                     <div class="event-details">
                                         <p class="text-sm font-bold text-[#1D3557]">${e.summary}</p>
-                                        <p class="text-[10px] text-red-700 font-semibold uppercase">${e.location !== 'Campus' ? '📍 ' + e.location : ''}</p>
+                                        <p class="text-[10px] text-red-700 font-semibold uppercase">${e.location ? '📍 ' + e.location : ''}</p>
                                     </div>
                                 </div>`).join('')}
                         </section>
@@ -178,14 +185,15 @@
                         <section>
                             <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Pending Matters</h2>
                             <div class="space-y-3">
-                                ${allTasks.filter(t => t.status !== 'completed').map(t => `
+                                ${pendingTasks.length > 0 ? pendingTasks.map(t => `
                                     <div class="p-4 bg-white border border-gray-100 text-[11px] font-medium text-gray-700 flex items-center gap-4">
                                         <div class="w-1.5 h-1.5 bg-gray-300"></div> ${t.title}
-                                    </div>`).join('')}
+                                    </div>`).join('') : '<p class="text-xs text-gray-400 italic">No pending tasks.</p>'}
                             </div>
                         </section>
                     </div>`;
             } catch (err) {
+                console.error(err);
                 container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Error: Check Console</div>`;
             }
         }
