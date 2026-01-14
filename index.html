@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v5.7 | Logistics Sentinel</title>
+    <title>LionMail Helper v5.9 | Executive Sentinel</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -13,7 +13,6 @@
         body { font-family: 'Inter', sans-serif; background-color: #fcfcfc; color: #111111; }
         h1, h2 { font-family: 'Playfair Display', serif; }
         
-        /* Paul Weiss Executive Style */
         .paul-weiss-container {
             background-color: #ffffff;
             border-left: 5px solid #1D3557;
@@ -21,7 +20,6 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
         }
 
-        /* Time-Block Calendar Style */
         .time-card {
             display: flex;
             align-items: center;
@@ -47,6 +45,7 @@
         }
         .btn-primary:hover { background-color: #457B9D; }
         
+        .prose h2 { font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: #1D3557; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem; }
         .prose strong { color: #1D3557; font-weight: 700; }
         .animate-fade-in { animation: fadeIn 0.8s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -57,7 +56,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Logistics Sentinel v5.7</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Sentinel v5.9</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -77,7 +76,6 @@
     </main>
 
     <script>
-        /* --- CREDENTIAL MANAGEMENT --- */
         function getStoredKey(keyName, promptMsg) {
             let val = localStorage.getItem(keyName);
             if (!val || val === "null") {
@@ -87,7 +85,6 @@
             return val;
         }
 
-        /* --- AI CORE --- */
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
             const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
@@ -104,7 +101,6 @@
             return data.candidates[0].content.parts[0].text;
         }
 
-        /* --- GOOGLE AUTH --- */
         const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
         let tokenClient;
 
@@ -136,10 +132,9 @@
             tokenClient.requestAccessToken({ prompt: 'select_account' });
         }
 
-        /* --- MAIN LOGIC --- */
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
-            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Calculating Logistics & Buffers...</p>`;
+            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Consulting the Sentinel...</p>`;
 
             try {
                 const now = new Date();
@@ -155,12 +150,11 @@
                         timeMin: now.toISOString(), 
                         singleEvents: true, 
                         orderBy: 'startTime',
-                        maxResults: 25 
+                        maxResults: 50 
                     }),
                     gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true })
                 ]);
 
-                // Sync Calendar with Tasks
                 const allTasks = tasks.result.items || [];
                 const completedTitles = allTasks.filter(t => t.status === 'completed').map(t => t.title.toLowerCase().trim());
 
@@ -171,28 +165,41 @@
                     start: new Date(e.start.dateTime || e.start.date),
                     end: new Date(e.end.dateTime || e.end.date),
                     location: e.location || "Location TBD",
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} to ${e.end.dateTime || e.end.date} at ${e.location || 'No Location'}`
+                    isRecurring: !!e.recurringEventId,
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} to ${e.end.dateTime || e.end.date} at ${e.location || 'N/A'}`
                 }));
 
                 let emailContext = "";
                 if (inbox.result.messages) {
-                    const details = await Promise.all(inbox.result.messages.slice(0, 8).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                    const details = await Promise.all(inbox.result.messages.slice(0, 10).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
                     emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
                 }
 
-                // THE LOGISTICS-AWARE PROMPT
                 const aiPrompt = `
-                    You are Christopher's Chief of Staff and Logistics Expert. 
-                    CURRENT DATE: ${dateString}.
+                    You are Christopher's Chief of Staff. 
+                    CURRENT SYSTEM DATE: ${dateString}.
                     
-                    TASKS:
-                    1. Provide a "Daily Summary" in the Zapier Style.
-                    2. TRAVEL BUFFER: Analyze the LOCATIONS and TIMES of consecutive events. 
-                       - If two events are in different locations (e.g., Columbia Campus vs. Midtown), ensure there is at least a 30-minute travel buffer. 
-                       - If the gap is too short, flag it with 🚨 TRAVEL CONFLICT and explain why.
-                    3. DURATION CONFLICT: Flag events that overlap in time using end times provided.
-                    4. PRIORITIES: Use 🔴 for urgent items found in emails.
+                    OUTPUT STRUCTURE (Strictly follow this layout):
                     
+                    Daily Summary - [Current Day and Date]
+                    📧 Recent Email Activity
+                    - Group into "🔴 High Priority" and "Upcoming Events from Emails".
+                    
+                    📅 Today's Calendar Events
+                    - List events for the next 24 hours only. Show times and locations.
+                    
+                    ⚠️ SCHEDULING CONFLICT DETECTED
+                    - Compare start/end times and locations for the next 48 hours. 
+                    - Use 🚨 for overlaps or tight travel (less than 30 mins between different locations).
+                    
+                    📋 Action Items
+                    - Extract specific tasks from the emails and calendar conflicts.
+
+                    STRATEGIC FILTERING:
+                    1. 48-HOUR FOCUS: Only provide granular time/travel details for today and tomorrow.
+                    2. HOLIDAYS & SIGNALS: Scan the full calendar for Holidays (e.g. MLK Day, National Holidays) or unique "one-off" events (e.g. Alex Honnold, Firm Events). Highlight these in a "Future Highlights" section.
+                    3. NOISE REDUCTION: Do NOT list recurring classes (Torts, Tax, etc.) if they occur more than 48 hours from now.
+
                     DATA:
                     CALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}
                     EMAILS:\n${emailContext}
@@ -200,20 +207,18 @@
 
                 const aiBriefing = await getAIResponse(aiPrompt);
 
-                // UI Rendering Logic
                 const displayEvents = activeEvents.filter(e => e.start <= tomorrow).length >= 6 
                     ? activeEvents.filter(e => e.start <= tomorrow) 
                     : activeEvents.slice(0, 6);
 
                 container.innerHTML = `
                     <section class="animate-fade-in">
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center">Executive Intelligence</h2>
                         <div class="paul-weiss-container prose prose-sm max-w-none">
                             ${marked.parse(aiBriefing)}
                         </div>
                     </section>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
                         <section>
                             <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Verified Schedule</h2>
                             <div class="space-y-1">
