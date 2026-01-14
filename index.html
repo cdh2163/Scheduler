@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v5.9 | Executive Sentinel</title>
+    <title>LionMail Helper | Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -56,7 +56,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Sentinel v5.9</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia law • Legal Methods II Harding</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -71,7 +71,7 @@
 
     <main id="dashboard" class="max-w-4xl mx-auto opacity-20 pointer-events-none transition-all duration-1000">
         <div id="brief-content" class="space-y-16">
-            <p class="text-center py-40 text-xs italic tracking-[0.5em] uppercase text-gray-300">Awaiting Encrypted Connection...</p>
+            <p class="text-center py-40 text-xs italic tracking-[0.5em] uppercase text-gray-300">Awaiting Secure Handshake...</p>
         </div>
     </main>
 
@@ -87,11 +87,7 @@
 
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
-            const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-            const listData = await (await fetch(listUrl)).json();
-            const bestModel = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash"))?.name || "models/gemini-1.5-flash";
-
-            const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel}:generateContent?key=${apiKey}`;
+            const genUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(genUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -134,7 +130,7 @@
 
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
-            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Consulting the Sentinel...</p>`;
+            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Checking with Chief of Staff...</p>`;
 
             try {
                 const now = new Date();
@@ -150,7 +146,7 @@
                         timeMin: now.toISOString(), 
                         singleEvents: true, 
                         orderBy: 'startTime',
-                        maxResults: 50 
+                        maxResults: 60 
                     }),
                     gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true })
                 ]);
@@ -164,9 +160,9 @@
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
                     end: new Date(e.end.dateTime || e.end.date),
-                    location: e.location || "Location TBD",
+                    location: e.location || "",
                     isRecurring: !!e.recurringEventId,
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} to ${e.end.dateTime || e.end.date} at ${e.location || 'N/A'}`
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} to ${e.end.dateTime || e.end.date} at ${e.location || 'NONE SPECIFIED'}`
                 }));
 
                 let emailContext = "";
@@ -179,8 +175,7 @@
                     You are Christopher's Chief of Staff. 
                     CURRENT SYSTEM DATE: ${dateString}.
                     
-                    OUTPUT STRUCTURE (Strictly follow this layout):
-                    
+                    OUTPUT STRUCTURE:
                     Daily Summary - [Current Day and Date]
                     📧 Recent Email Activity
                     - Group into "🔴 High Priority" and "Upcoming Events from Emails".
@@ -190,14 +185,16 @@
                     
                     ⚠️ SCHEDULING CONFLICT DETECTED
                     - Compare start/end times and locations for the next 48 hours. 
-                    - Use 🚨 for overlaps or tight travel (less than 30 mins between different locations).
+                    - Use 🚨 for overlaps or travel issues.
+                    - TRAVEL LOGIC: If an event has "NONE SPECIFIED" for location, assume it is on-campus and requires a 10-minute transition. Only flag if the gap is less than 10 minutes.
+                    - If locations are different (e.g. Campus vs. Midtown), require a 30-minute buffer.
                     
                     📋 Action Items
                     - Extract specific tasks from the emails and calendar conflicts.
 
                     STRATEGIC FILTERING:
                     1. 48-HOUR FOCUS: Only provide granular time/travel details for today and tomorrow.
-                    2. HOLIDAYS & SIGNALS: Scan the full calendar for Holidays (e.g. MLK Day, National Holidays) or unique "one-off" events (e.g. Alex Honnold, Firm Events). Highlight these in a "Future Highlights" section.
+                    2. HOLIDAYS & SIGNALS: Scan the full calendar for Holidays (MANDATORY: Flag MLK Day if it appears) or unique "one-off" events. Highlight these in a "Future Highlights" section.
                     3. NOISE REDUCTION: Do NOT list recurring classes (Torts, Tax, etc.) if they occur more than 48 hours from now.
 
                     DATA:
@@ -230,7 +227,7 @@
                                         </div>
                                         <div class="event-details">
                                             <p class="text-sm font-bold text-[#1D3557] leading-tight">${e.summary}</p>
-                                            <p class="text-[10px] text-red-700 font-semibold uppercase tracking-tighter">${e.location !== 'Location TBD' ? '📍 ' + e.location : ''}</p>
+                                            ${e.location ? `<p class="text-[10px] text-red-700 font-semibold uppercase tracking-tighter">📍 ${e.location}</p>` : ''}
                                         </div>
                                     </div>`).join('')}
                             </div>
@@ -251,7 +248,7 @@
 
             } catch (err) {
                 console.error(err);
-                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">System Sync Error: Check Console</div>`;
+                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase tracking-widest">Chief of Staff: System Sync Error</div>`;
             }
         }
     </script>
