@@ -56,7 +56,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia law • Legal Methods II Harding</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Office of the Chief of Staff</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -87,12 +87,14 @@
 
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
-            const genUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // Standardizing to the v1beta endpoint for maximum reliability
+            const genUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(genUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
+            if (!response.ok) throw new Error('AI Service Unavailable');
             const data = await response.json();
             return data.candidates[0].content.parts[0].text;
         }
@@ -119,13 +121,18 @@
         }
 
         function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                document.getElementById('auth_btn').classList.add('hidden');
-                document.getElementById('refresh_btn').classList.remove('hidden');
-                document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
-                runLionMailBriefing();
-            };
-            tokenClient.requestAccessToken({ prompt: 'select_account' });
+            try {
+                tokenClient.callback = async (resp) => {
+                    if (resp.error) throw resp;
+                    document.getElementById('auth_btn').classList.add('hidden');
+                    document.getElementById('refresh_btn').classList.remove('hidden');
+                    document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
+                    runLionMailBriefing();
+                };
+                tokenClient.requestAccessToken({ prompt: 'select_account' });
+            } catch (e) {
+                alert("Auth failed. Check if you are using HTTPS or localhost.");
+            }
         }
 
         async function runLionMailBriefing() {
@@ -161,7 +168,6 @@
                     start: new Date(e.start.dateTime || e.start.date),
                     end: new Date(e.end.dateTime || e.end.date),
                     location: e.location || "",
-                    isRecurring: !!e.recurringEventId,
                     raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} to ${e.end.dateTime || e.end.date} at ${e.location || 'NONE SPECIFIED'}`
                 }));
 
@@ -186,15 +192,15 @@
                     ⚠️ SCHEDULING CONFLICT DETECTED
                     - Compare start/end times and locations for the next 48 hours. 
                     - Use 🚨 for overlaps or travel issues.
-                    - TRAVEL LOGIC: If an event has "NONE SPECIFIED" for location, assume it is on-campus and requires a 10-minute transition. Only flag if the gap is less than 10 minutes.
-                    - If locations are different (e.g. Campus vs. Midtown), require a 30-minute buffer.
+                    - TRAVEL LOGIC: If location is "NONE SPECIFIED", assume it is on-campus and requires a 10-minute transition. Only flag if the gap is less than 10 minutes.
+                    - If locations are different, require a 30-minute buffer.
                     
                     📋 Action Items
                     - Extract specific tasks from the emails and calendar conflicts.
 
                     STRATEGIC FILTERING:
                     1. 48-HOUR FOCUS: Only provide granular time/travel details for today and tomorrow.
-                    2. HOLIDAYS & SIGNALS: Scan the full calendar for Holidays (MANDATORY: Flag MLK Day if it appears) or unique "one-off" events. Highlight these in a "Future Highlights" section.
+                    2. HOLIDAYS & SIGNALS: Scan for Holidays (MANDATORY: Flag MLK Day if it appears) or unique "one-off" events. Highlight these in a "Future Highlights" section.
                     3. NOISE REDUCTION: Do NOT list recurring classes (Torts, Tax, etc.) if they occur more than 48 hours from now.
 
                     DATA:
