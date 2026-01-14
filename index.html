@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v7.9 | Executive Chief of Staff</title>
+    <title>LionMail Helper v8.0 | Executive Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -30,7 +30,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v7.9</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v8.0</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -124,15 +124,15 @@
                 const [inbox, calendar, tasks, scheduled] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
                     gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
-                    // FIXED: showCompleted is FALSE. This ensures completed tasks are never fetched.
+                    // FIXED: Strictly exclude completed tasks at the API level
                     gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: false, showHidden: false }),
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'label:scheduled' })
                 ]);
 
-                // Additional safety filter
+                // Double verification: Filter to ensure status is 'needsAction'
                 const pendingTasks = (tasks.result.items || []).filter(t => t.status === 'needsAction');
 
-                // LOCATION LOGIC: if e.location is undefined/null, it stays null.
+                // LOCATION LOGIC: If missing, send nothing.
                 const activeEvents = (calendar.result.items || []).map(e => ({
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
@@ -146,7 +146,7 @@
                     const scheduledDetails = await Promise.all(scheduled.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
                     scheduledContext = scheduledDetails.map(d => {
                         const subj = d.result.payload.headers.find(h=>h.name==='Subject')?.value || 'No Subject';
-                        return `Scheduled Email Subject: "${subj}" | Snippet: ${d.result.snippet}`;
+                        return `Subject: "${subj}" | Body Snippet: ${d.result.snippet}`;
                     }).join('\n');
                 }
 
@@ -156,6 +156,7 @@
                     emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
                 }
 
+                // BRIEFING PROMPT
                 const briefingPrompt = `You are Christopher's Chief of Staff. DATE: ${dateString}.
                 
                 STRUCTURE:
@@ -163,30 +164,33 @@
                 📧 Recent Email Activity (🔴 High Priority)
                 📅 Today's Calendar (Next 24h)
                 ⚠️ SCHEDULING CONFLICT DETECTED
-                📋 Action Items
+                📋 Action Items (From Pending Tasks Only)
                 🌟 Future Highlights
 
                 STRATEGIC FILTERING:
                 1. 48-HOUR FOCUS.
-                2. LOCATION: If data is empty, do not assume "Campus". Say nothing.
-                3. TASK SYNC: The list provided is strictly pending.
+                2. LOCATION: If blank, say nothing.
+                3. TASKS: Pending items only.
                 4. HOLIDAYS: Only mention if in the next 7 days.
 
-                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}\nTASKS:\n${pendingTasks.map(t => t.title).join('\n')}`;
+                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}\nPENDING TASKS:\n${pendingTasks.map(t => t.title).join('\n')}`;
 
-                const schedulingPrompt = `You are Christopher's Chief of Staff. Review these SCHEDULED emails against the calendar/date (${dateString}).
+                // PROOFREADING PROMPT
+                const auditPrompt = `You are a strict PROOFREADER. Review these SCHEDULED emails.
                 
                 SCHEDULED EMAILS:\n${scheduledContext}
-                CALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}
 
-                TASK: Provide a ONE-LINE summary for each email.
-                STRICT FORMAT PER LINE:
-                "📧 [Subject] — [✅ Good to Go / 🛑 Bad] — [Very brief reason]"
+                TASK: Check for Typos, Grammar errors, or Weird formatting/names.
+                DO NOT check the schedule. DO NOT check the substance.
+                
+                OUTPUT FORMAT (One line per email):
+                "📧 [Subject] — [✅ Clean / ⚠️ Typo Found] — [If typo, specify exactly what is wrong. If clean, say "Ready to send."]"
+                
                 If no emails, say "No outgoing correspondence pending."`;
 
-                const [aiBriefing, aiScheduling] = await Promise.all([
+                const [aiBriefing, aiAudit] = await Promise.all([
                     getAIResponse(briefingPrompt),
-                    getAIResponse(schedulingPrompt)
+                    getAIResponse(auditPrompt)
                 ]);
 
                 container.innerHTML = `
@@ -196,7 +200,7 @@
 
                     <section class="schedule-block animate-fade-in prose prose-sm max-w-none">
                         <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4 pb-2 border-b">Outgoing Correspondence Audit</h2>
-                        ${marked.parse(aiScheduling)}
+                        ${marked.parse(aiAudit)}
                     </section>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
