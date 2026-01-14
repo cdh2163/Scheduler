@@ -55,7 +55,8 @@
 
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
-            const genUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // REVERTED: Using standard v1 endpoint and explicit flash model string
+            const genUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const response = await fetch(genUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -102,17 +103,16 @@
 
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
-            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Checking with Chief of Staff...</p>`;
+            container.innerHTML = `<p class="text-center py-40 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Consulting Chief of Staff...</p>`;
 
             try {
                 const now = new Date();
                 const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
                 const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-                // Fetch Data
                 const [inbox, calendar, tasks] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
-                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
+                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 60 }),
                     gapi.client.tasks.tasks.list({ tasklist: '@default' })
                 ]);
 
@@ -125,15 +125,23 @@
 
                 let emailContext = "";
                 if (inbox.result.messages) {
-                    const details = await Promise.all(inbox.result.messages.slice(0, 8).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
-                    emailContext = details.map(d => `Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
+                    const details = await Promise.all(inbox.result.messages.slice(0, 10).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                    emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
                 }
 
-                const aiPrompt = `Review these for Christopher for ${dateString}. Format as a Chief of Staff Briefing. 
-                1. 48-hour focus only. 
-                2. If location is NONE SPECIFIED, assume on-campus (10 min buffer). 
-                3. Flag MLK Day or other major holidays/one-offs in a "Future Highlights" section. 
-                4. Do NOT list recurring classes past 48 hours. 
+                const aiPrompt = `You are Christopher's Chief of Staff. Review these for ${dateString}.
+                OUTPUT STRUCTURE:
+                - Daily Summary - [Date]
+                - 📧 Recent Email Activity (🔴 High Priority & Upcoming)
+                - 📅 Today's Calendar (Next 24h only)
+                - ⚠️ Scheduling Conflicts (🚨 Flag overlaps or tight travel)
+                - 📋 Action Items
+                - 🌟 Future Highlights (MANDATORY: Flag MLK Day or unique one-offs like Alex Honnold)
+
+                RULES:
+                1. 48-hour focus for granular details.
+                2. If location is NONE SPECIFIED, assume on-campus (10 min buffer). 30 min if locations differ.
+                3. NO recurring classes past 48 hours.
                 \nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}`;
 
                 const aiBriefing = await getAIResponse(aiPrompt);
@@ -151,7 +159,7 @@
                         </section>
                     </div>`;
             } catch (err) {
-                console.error("CRITICAL SYNC ERROR:", err);
+                console.error("SYNC ERROR:", err);
                 container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Error: ${err.message}</div>`;
             }
         }
