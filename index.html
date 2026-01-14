@@ -85,35 +85,46 @@
             const now = new Date();
             const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             
-            container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Updating Briefing (${timestamp})...</p>`;
-
+            container.innerHTML = `<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400 animate-pulse">Scanning LionMail (${timestamp})...</p>`;
+        
             async function safeFetch(request) {
                 try {
                     const response = await request;
                     return response.result;
                 } catch (e) {
-                    console.warn("LionMail Helper: Section failed to load (Permissions/API issue):", e);
+                    console.warn("LionMail Helper: Section failed to load:", e);
                     return {}; 
                 }
             }
-
+        
             try {
-                const [emails, drafts, calendar, tasks] = await Promise.all([
-                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread', 'maxResults': 10 })),
+                // 1. Fetch data (Removed date precision to find ALL unread)
+                // 'includeSpamTrash: true' is the key to finding those hidden emails
+                const [inboxEmails, spamEmails, drafts, calendar, tasks] = await Promise.all([
+                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread label:inbox' })),
+                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread label:spam', 'includeSpamTrash': true })),
                     safeFetch(gapi.client.gmail.users.drafts.list({ 'userId': 'me' })),
                     safeFetch(gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': now.toISOString(), 'singleEvents': true, 'orderBy': 'startTime', 'maxResults': 30 })),
                     safeFetch(gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': true, 'showHidden': true }))
                 ]);
-
+        
+                const unreadInbox = (inboxEmails.messages || []).length;
+                const unreadSpam = (spamEmails.messages || []).length;
+                const totalUnread = unreadInbox + unreadSpam;
+        
                 const allTasks = tasks.items || [];
                 const activeTasks = allTasks.filter(t => t.status !== 'completed');
                 const completedTitles = allTasks.filter(t => t.status === 'completed').map(t => (t.title || "").toLowerCase());
                 
                 const rawEvents = calendar.items || [];
                 const draftItems = drafts.drafts || [];
-                const unreadCount = (emails.messages || []).length;
-
-                // 1. SMART CALENDAR FILTERING (Hide routines & completed tasks)
+        
+                // 2. Scheduled Email Logic
+                let scheduledNote = draftItems.length > 0 
+                    ? "Your scheduled email is queued and good to go." 
+                    : "No scheduled emails detected.";
+        
+                // 3. Smart Calendar Filtering
                 const uniqueEvents = rawEvents.filter(event => {
                     const title = (event.summary || "").toLowerCase();
                     const isRoutine = event.recurringEventId;
@@ -121,16 +132,27 @@
                     const isException = title.includes("holiday") || title.includes("no class") || title.includes("first") || title.includes("exam") || title.includes("reception");
                     return (!isRoutine && !isGhostTask) || isException;
                 });
-
-                // 2. CONSTRUCT EXECUTIVE SUMMARY
-                let emailBrief = unreadCount === 0 ? "You are all caught up with emails." : `You have ${unreadCount} unread messages.`;
-                let scheduledNote = draftItems.length > 0 ? "Your scheduled email is queued and good to go." : "No scheduled emails detected.";
-
+        
+                // 4. Executive Summary Phrasing
+                let emailBrief = "";
+                if (totalUnread === 0) {
+                    emailBrief = "You are all caught up with emails.";
+                } else {
+                    emailBrief = `You have ${totalUnread} unread message${totalUnread > 1 ? 's' : ''} total.`;
+                    if (unreadInbox > 0 && unreadSpam > 0) {
+                        emailBrief += ` (${unreadInbox} in Inbox, ${unreadSpam} flagged as Spam).`;
+                    } else if (unreadSpam > 0) {
+                        emailBrief += ` (Note: ${unreadSpam} unread message${unreadSpam > 1 ? 's' : ''} found in your Spam folder).`;
+                    } else {
+                        emailBrief += ` (Found in Inbox).`;
+                    }
+                }
+        
                 container.innerHTML = `
                     <div class="text-center -mb-8 animate-fade-in">
                         <p class="text-[9px] uppercase tracking-widest text-gray-300 font-bold">Updated: ${timestamp}</p>
                     </div>
-
+        
                     <section class="text-center space-y-4 animate-fade-in">
                         <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Executive Summary</h2>
                         <div class="p-10 bg-gray-50 border border-gray-100 italic text-sm text-gray-700 leading-relaxed font-serif shadow-sm">
@@ -139,7 +161,7 @@
                             <p class="mt-4 text-[11px] uppercase tracking-widest text-[#457B9D] font-sans font-bold italic border-t border-gray-100 pt-4">${scheduledNote}</p>
                         </div>
                     </section>
-
+        
                     <section class="${activeTasks.length > 0 ? 'animate-fade-in' : 'hidden'}">
                         <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-[#1D3557] mb-6 text-center">Pending Tasks</h2>
                         <div class="space-y-3">
@@ -151,7 +173,7 @@
                             `).join('')}
                         </div>
                     </section>
-
+        
                     <section class="animate-fade-in">
                         <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center">Unique Events & Exceptions</h2>
                         <div class="space-y-6">
@@ -173,6 +195,7 @@
                         </div>
                     </section>
                 `;
+        
             } catch (err) {
                 console.error("Briefing Error:", err);
                 container.innerHTML = `<p class="p-10 text-center text-xs text-red-500 uppercase tracking-widest border border-red-100">Update Failed: ${err.message}</p>`;
