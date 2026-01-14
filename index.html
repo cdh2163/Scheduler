@@ -6,14 +6,16 @@
     <title>DEADLINE SENTINEL | Law Student Chief of Staff</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #111111; }
         h1, h2, h3 { font-family: 'Playfair Display', serif; letter-spacing: -0.02em; }
         .legal-border { border: 1px solid #e5e7eb; border-radius: 0px !important; }
         .status-critical { border-left: 4px solid #000000; background-color: #fdf2f2; }
         .status-low { border-left: 4px solid #9ca3af; background-color: #f9fafb; }
-        .btn-paulweiss { background-color: #111111; color: white; border-radius: 0px; transition: all 0.2s; }
+        .btn-paulweiss { background-color: #111111; color: white; border-radius: 0px; transition: all 0.2s; cursor: pointer; }
         .btn-paulweiss:hover { background-color: #333333; }
+        .hidden { display: none; }
     </style>
 </head>
 <body class="p-8">
@@ -21,92 +23,197 @@
     <header class="flex justify-between items-end border-b-2 border-black pb-4 mb-8">
         <div>
             <h1 class="text-3xl uppercase tracking-widest">Deadline Sentinel</h1>
-            <p class="text-sm uppercase tracking-tighter text-gray-500 mt-1">Law Student Chief of Staff & Career Strategist</p>
+            <p class="text-sm uppercase tracking-tighter text-gray-500 mt-1">Law Student Chief of Staff | Security: Read-Only Mode</p>
         </div>
         <div class="flex gap-4">
-            <button id="auth_button" onclick="handleAuthClick()" class="btn-paulweiss px-6 py-2 text-xs uppercase tracking-widest">Connect Workspace</button>
-            <button id="refresh_button" onclick="refreshData()" class="border border-black px-4 py-2 text-xs uppercase tracking-widest hover:bg-gray-100">Refresh Pulse</button>
+            <button id="auth_btn" onclick="handleAuthClick()" class="btn-paulweiss px-6 py-2 text-xs uppercase tracking-widest">Connect Workspace</button>
+            <button id="signout_btn" onclick="handleSignoutClick()" class="hidden border border-black px-4 py-2 text-xs uppercase tracking-widest hover:bg-gray-100">Sign Out</button>
         </div>
     </header>
 
-    <main class="grid grid-cols-1 md:grid-cols-3 gap-10">
+    <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 gap-10 opacity-30 pointer-events-none transition-opacity duration-500">
         
         <section>
             <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">Inbox Pulse</h2>
-            <div id="email_list" class="space-y-4">
-                <div class="text-xs text-gray-400 italic">Connect your account to scan recent correspondence...</div>
-                <div class="legal-border p-4">
-                    <div class="flex justify-between text-[10px] uppercase tracking-widest text-gray-500 mb-2">
-                        <span>From: Davis Polk</span>
-                        <span>2h ago</span>
-                    </div>
-                    <p class="text-sm font-semibold">Invitation: 1L Reception</p>
-                    <p class="text-xs text-gray-600 mt-1 truncate">We would like to invite you to our offices on Jan 15...</p>
-                </div>
+            <div id="email_list" class="space-y-4 text-sm text-gray-400 italic">
+                Awaiting authorization...
             </div>
         </section>
 
         <section>
-            <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">The 10-Day Horizon</h2>
-            <div id="calendar_list" class="space-y-4">
-                <div class="flex gap-4">
-                    <div class="w-12 text-center">
-                        <span class="block text-xs uppercase text-gray-400">Jan</span>
-                        <span class="block text-xl font-bold leading-none">20</span>
-                    </div>
-                    <div class="flex-1 border-l border-gray-200 pl-4 py-1">
-                        <p class="text-sm font-semibold italic uppercase tracking-tighter">Semester Start</p>
-                        <p class="text-xs text-gray-500">9:00 AM • Criminal Law (JG 103)</p>
-                    </div>
-                </div>
+            <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">10-Day Horizon</h2>
+            <div id="calendar_list" class="space-y-4 text-sm text-gray-400 italic">
+                Awaiting authorization...
             </div>
         </section>
 
         <section>
             <h2 class="text-xl mb-6 border-b border-gray-200 pb-2">Sentinel Alerts</h2>
             <div id="alert_list" class="space-y-4">
-                <div class="status-critical p-4 legal-border">
-                    <h4 class="text-xs font-bold uppercase tracking-widest mb-1 text-red-600">Critical Conflict</h4>
-                    <p class="text-sm font-semibold leading-snug">Davis Polk Reception vs. Legal Methods Final Prep</p>
-                    <p class="text-xs text-gray-600 mt-2">The reception on Jan 15 overlaps with your 4-hour blocked study time for Legal Methods.</p>
-                </div>
-
-                <div class="status-low p-4 legal-border">
-                    <h4 class="text-xs font-bold uppercase tracking-widest mb-1 text-gray-500">Scheduling Note</h4>
-                    <p class="text-sm font-semibold leading-snug">Office Hours Overlap</p>
-                    <p class="text-xs text-gray-600 mt-2">Torts Office Hours overlap with the MoFo Career Spotlight. Sentinel logic: Low importance.</p>
+                <div class="p-4 border border-dashed border-gray-300 text-xs text-gray-400 italic">
+                    Conflict analysis will appear here.
                 </div>
             </div>
         </section>
-
-    </main>
+    </div>
 
     <script>
-        /* VIBE CODING LOGIC:
-           1. Connects to Google API
-           2. Scans Email for "Jan", "Feb", "Monday", etc.
-           3. Compares found dates against Calendar IDs.
-        */
-
-        const CLIENT_ID = '726223768097-u4ksqn50sb8kadet8pm8aet20sqa26er.apps.googleusercontent.com';
-        const API_KEY = 'YOUR_API_KEY';
+        /* --- CONFIGURATION --- */
+        const CLIENT_ID = '726223768097-u4ksqn50sb8kadet8pm8aet20sqa26er.apps.googleusercontent.com'; 
         const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly';
 
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+
+        /* --- INITIALIZATION --- */
+        function gapiLoaded() {
+            gapi.load('client', intializeGapiClient);
+        }
+
+        async function intializeGapiClient() {
+            await gapi.client.init({
+                discoveryDocs: [
+                    "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
+                    "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"
+                ],
+            });
+            gapiInited = true;
+        }
+
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '', // defined in handleAuthClick
+            });
+            gisInited = true;
+        }
+
+        /* --- AUTH ACTIONS --- */
         function handleAuthClick() {
-            // Placeholder for Google Auth Logic
-            alert("Vibe Check: GAPI Authorization would trigger here. Replace CLIENT_ID to go live.");
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) { throw (resp); }
+                document.getElementById('auth_btn').classList.add('hidden');
+                document.getElementById('signout_btn').classList.remove('hidden');
+                document.getElementById('dashboard').classList.remove('opacity-30', 'pointer-events-none');
+                await runSentinel();
+            };
+
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken({prompt: 'consent'});
+            } else {
+                tokenClient.requestAccessToken({prompt: ''});
+            }
         }
 
-        function refreshData() {
-            // Logic to pull data and run the Sentinel conflict analysis
-            console.log("Sentinel is scanning...");
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token);
+                gapi.client.setToken('');
+                location.reload();
+            }
         }
 
-        // Sentinel Logic: Simple Keyword Date Matcher
-        function checkConflicts(emailBody, eventTime) {
-            // A more advanced version would use Regex or LLM to extract dates
-            return emailBody.includes(eventTime);
+        /* --- THE SENTINEL CORE LOGIC --- */
+        async function runSentinel() {
+            const emailList = document.getElementById('email_list');
+            const calendarList = document.getElementById('calendar_list');
+            const alertList = document.getElementById('alert_list');
+            
+            emailList.innerHTML = '<p class="text-xs italic">Scanning unread messages...</p>';
+            calendarList.innerHTML = '<p class="text-xs italic">Fetching horizon...</p>';
+            alertList.innerHTML = ''; 
+
+            try {
+                // 1. Fetch Emails
+                const gmailResponse = await gapi.client.gmail.users.messages.list({
+                    'userId': 'me',
+                    'maxResults': 8,
+                    'q': 'is:unread'
+                });
+
+                // 2. Fetch Calendar
+                const calResponse = await gapi.client.calendar.events.list({
+                    'calendarId': 'primary',
+                    'timeMin': (new Date()).toISOString(),
+                    'showDeleted': false,
+                    'singleEvents': true,
+                    'maxResults': 12,
+                    'orderBy': 'startTime',
+                });
+
+                const messages = gmailResponse.result.messages || [];
+                const events = calResponse.result.items || [];
+
+                // Render Emails
+                emailList.innerHTML = '';
+                if (messages.length > 0) {
+                    for (const m of messages) {
+                        const details = await gapi.client.gmail.users.messages.get({'userId': 'me', 'id': m.id});
+                        const subject = details.result.payload.headers.find(h => h.name === 'Subject')?.value || 'No Subject';
+                        const from = details.result.payload.headers.find(h => h.name === 'From')?.value || 'Unknown';
+                        
+                        emailList.innerHTML += `
+                            <div class="legal-border p-4 mb-3 hover:bg-gray-50 transition-colors">
+                                <div class="text-[10px] uppercase tracking-widest text-gray-400 mb-1">${from.split('<')[0]}</div>
+                                <div class="font-semibold text-sm leading-tight">${subject}</div>
+                            </div>`;
+                    }
+                } else {
+                    emailList.innerHTML = '<div class="text-xs text-gray-500 italic">No unread correspondence found.</div>';
+                }
+
+                // Render Calendar
+                calendarList.innerHTML = '';
+                if (events.length > 0) {
+                    events.forEach(event => {
+                        const start = new Date(event.start.dateTime || event.start.date);
+                        const dateStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        const timeStr = event.start.dateTime ? start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All Day';
+
+                        calendarList.innerHTML += `
+                            <div class="flex gap-4 mb-4">
+                                <div class="w-10 text-center">
+                                    <span class="block text-xl font-bold leading-none">${start.getDate()}</span>
+                                    <span class="block text-[10px] uppercase text-gray-400">${start.toLocaleString('default', { month: 'short' })}</span>
+                                </div>
+                                <div class="flex-1 border-l border-gray-200 pl-4">
+                                    <p class="text-sm font-semibold">${event.summary}</p>
+                                    <p class="text-[10px] text-gray-500 uppercase tracking-tighter">${timeStr}</p>
+                                </div>
+                            </div>`;
+                    });
+                }
+
+                // 3. Sentinel Alert Analysis
+                let alertsFound = 0;
+                events.forEach(event => {
+                    const title = event.summary.toLowerCase();
+                    if (title.includes("office hours")) {
+                        alertsFound++;
+                        alertList.innerHTML += `
+                            <div class="status-low p-4 legal-border mb-3">
+                                <h4 class="text-[10px] font-bold uppercase tracking-widest mb-1 text-gray-500">Minor Priority</h4>
+                                <p class="text-sm font-semibold italic uppercase tracking-tighter">${event.summary}</p>
+                                <p class="text-[10px] text-gray-600 mt-2">Note: Sentinel has deprioritized this event in conflict calculations.</p>
+                            </div>`;
+                    }
+                });
+
+                if(alertsFound === 0) {
+                    alertList.innerHTML = '<div class="text-xs text-gray-400 italic">No critical conflicts detected in the 10-day horizon.</div>';
+                }
+
+            } catch (err) {
+                console.error("Sentinel Error:", err);
+                emailList.innerHTML = '<p class="text-red-500 text-xs">Error scanning data. See console.</p>';
+            }
         }
     </script>
+
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
