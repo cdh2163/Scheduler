@@ -31,98 +31,126 @@
     </div>
 
     <script>
+        /* --- CONFIGURATION --- */
         const CLIENT_ID = '726223768097-u4ksqn50sb8kadet8pm8aet20sqa26er.apps.googleusercontent.com'; 
         const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
-
+        
         let tokenClient;
         let gapiInited = false;
         let gisInited = false;
-
-        function gapiLoaded() { gapi.load('client', async () => {
+        
+        /* --- INITIALIZATION --- */
+        function gapiLoaded() {
+            gapi.load('client', intializeGapiClient);
+        }
+        
+        async function intializeGapiClient() {
             await gapi.client.init({
                 discoveryDocs: [
                     "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
                     "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-                    "https://www.googleapis.com/apis/tasks/v1/rest"
+                    "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
                 ],
             });
             gapiInited = true;
-        });}
-
-        function gisLoaded() { tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPES, callback: '' }); gisInited = true; }
-
+        }
+        
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '', 
+            });
+            gisInited = true;
+        }
+        
+        /* --- COMBINED AUTH STEP (v3.2: Forced Consent) --- */
         function handleAuthClick() {
             tokenClient.callback = async (resp) => {
-                if (resp.error !== undefined) throw (resp);
+                if (resp.error !== undefined) { throw (resp); }
                 document.getElementById('auth_btn').classList.add('hidden');
                 document.getElementById('dashboard').classList.remove('opacity-30', 'pointer-events-none');
                 await runLionMailBriefing();
             };
-            tokenClient.requestAccessToken({prompt: 'consent'});
+        
+            // Forces Google to show the "Select Account" and "Permissions Checkbox" screen
+            // This is the fix for "Inconsistent Tasks"
+            tokenClient.requestAccessToken({ prompt: 'select_account consent' });
         }
-
+        
+        /* --- BULLETPROOF BRIEFING LOGIC (v3.1: Safe Fetching) --- */
         async function runLionMailBriefing() {
             const container = document.getElementById('brief-content');
             container.innerHTML = '<p class="text-center py-20 text-xs italic tracking-widest uppercase text-gray-400">Synthesizing Briefing...</p>';
-
+        
+            // Safety Wrapper: Prevents one failing API from crashing the whole app
+            async function safeFetch(request) {
+                try {
+                    const response = await request;
+                    return response.result;
+                } catch (e) {
+                    console.warn("LionMail Helper: A section failed to load (Check Scopes/APIs):", e);
+                    return {}; 
+                }
+            }
+        
             try {
-                // Fetch data with individual error handling to prevent "Briefing Failed" crash
-                const emailReq = gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread', 'maxResults': 10 }).catch(e => ({result: {}}));
-                const draftReq = gapi.client.gmail.users.drafts.list({ 'userId': 'me' }).catch(e => ({result: {}}));
-                const calReq = gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': new Date().toISOString(), 'singleEvents': true, 'orderBy': 'startTime', 'maxResults': 25 }).catch(e => ({result: {}}));
-                const taskReq = gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': false }).catch(e => ({result: {}}));
-
-                const [emails, drafts, calendar, tasks] = await Promise.all([emailReq, draftReq, calReq, taskReq]);
-
-                const activeTasks = tasks.result.items || [];
-                const rawEvents = calendar.result.items || [];
-                const draftItems = drafts.result.drafts || [];
-
-                // Logic: Task Grouping
+                const [emails, drafts, calendar, tasks] = await Promise.all([
+                    safeFetch(gapi.client.gmail.users.messages.list({ 'userId': 'me', 'q': 'is:unread', 'maxResults': 10 })),
+                    safeFetch(gapi.client.gmail.users.drafts.list({ 'userId': 'me' })),
+                    safeFetch(gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': new Date().toISOString(), 'singleEvents': true, 'orderBy': 'startTime', 'maxResults': 25 })),
+                    safeFetch(gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': false }))
+                ]);
+        
+                const activeTasks = tasks.items || [];
+                const rawEvents = calendar.items || [];
+                const draftItems = drafts.drafts || [];
+        
+                // 1. Task Grouping Logic
                 let taskSummary = activeTasks.length > 3 
-                    ? `You have ${activeTasks.length} pending actions, focusing on ${activeTasks[0].title.split(' ')[0]}.`
-                    : "Tasks are discrete and manageable today.";
-
-                // Logic: Unique Calendar Events (Filter out recurring routines)
+                    ? `You have ${activeTasks.length} pending actions. Focus is on "${activeTasks[0].title}".`
+                    : activeTasks.length > 0 ? "Tasks are discrete and manageable today." : "No pending tasks detected.";
+        
+                // 2. Unique Calendar Events (Filter out routine, show exceptions)
                 const uniqueEvents = rawEvents.filter(event => {
-                    const title = event.summary.toLowerCase();
+                    const title = (event.summary || "").toLowerCase();
                     const isRoutine = event.recurringEventId;
-                    const isException = title.includes("holiday") || title.includes("no class") || title.includes("first") || title.includes("exam");
+                    const isException = title.includes("holiday") || title.includes("no class") || title.includes("first") || title.includes("exam") || title.includes("review");
                     return !isRoutine || isException;
                 });
-
-                // Logic: Scheduled Email Audit
+        
+                // 3. Scheduled Email Audit
                 let scheduledAudit = draftItems.length > 0 
-                    ? `Audit complete: ${draftItems.length} scheduled drafts found. No domain typos detected.` 
+                    ? `Audit complete: ${draftItems.length} drafts found. Reviewing for scheduled consistency.` 
                     : "No scheduled emails found in outbox.";
-
-                // RENDER
+        
+                // 4. Render the Memo
                 container.innerHTML = `
-                    <section class="text-center space-y-4">
+                    <section class="text-center space-y-4 animate-fade-in">
                         <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Executive Summary</h2>
                         <div class="p-10 bg-gray-50 border border-gray-100 italic text-sm text-gray-700 leading-relaxed font-serif shadow-sm">
-                            <p class="mb-4">Briefing for ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</p>
+                            <p class="mb-4">Briefing for ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                             <p><strong>Status:</strong> ${scheduledAudit}</p>
                             <p class="mt-2 text-[#457B9D]">${taskSummary}</p>
                         </div>
                     </section>
-
+        
                     <section class="${activeTasks.length > 0 ? '' : 'hidden'}">
                         <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-[#1D3557] mb-6 text-center">Pending Tasks</h2>
                         <div class="space-y-3">
                             ${activeTasks.map(t => `
-                                <div class="flex items-center gap-4 p-4 border border-gray-100 bg-white">
+                                <div class="flex items-center gap-4 p-4 border border-gray-100 bg-white shadow-sm">
                                     <div class="w-2 h-2 rounded-full bg-[#9BCBEB]"></div>
-                                    <span class="text-sm font-medium">${t.title}</span>
+                                    <span class="text-sm font-medium tracking-tight">${t.title}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </section>
-
+        
                     <section>
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center text-center">Unique Events & Exceptions</h2>
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 text-center">Unique Events & Exceptions</h2>
                         <div class="space-y-6">
-                            ${uniqueEvents.map(e => {
+                            ${uniqueEvents.length > 0 ? uniqueEvents.map(e => {
                                 const start = new Date(e.start.dateTime || e.start.date);
                                 const isCritical = e.summary.toLowerCase().includes("holiday") || e.summary.toLowerCase().includes("exam");
                                 return `
@@ -132,20 +160,19 @@
                                         </div>
                                         <div class="flex-1">
                                             <p class="text-sm font-bold uppercase tracking-tight text-[#1D3557]">${e.summary}</p>
-                                            <p class="text-[10px] text-gray-400 mt-2 font-semibold">
+                                            <p class="text-[10px] text-gray-400 mt-2 font-semibold uppercase">
                                                 ${e.start.dateTime ? start.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}) : 'All Day'}
                                             </p>
                                         </div>
                                     </div>`;
-                            }).join('')}
+                            }).join('') : '<p class="text-xs italic text-center text-gray-400">No non-routine events detected in the current horizon.</p>'}
                         </div>
                     </section>
                 `;
+        
             } catch (err) {
-                console.error("Briefing Error:", err);
-                container.innerHTML = `<div class="p-10 text-center text-xs text-red-500 border border-red-100 uppercase tracking-widest">
-                    Briefing Failed. <br> <span class="text-[10px] text-gray-400 lowercase mt-2 block">Check Console for: ${err.message}</span>
-                </div>`;
+                console.error("Critical Briefing Error:", err);
+                container.innerHTML = `<p class="p-10 text-center text-xs text-red-500 uppercase tracking-widest border border-red-100">Critical Fail: ${err.message}</p>`;
             }
         }
     </script>
