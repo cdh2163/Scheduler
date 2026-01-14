@@ -55,20 +55,11 @@
 
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
-            
-            // DYNAMIC DISCOVERY LOGIC: List models to find the active Flash version
             const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
             const listResp = await fetch(listUrl);
             const listData = await listResp.json();
+            const activeModel = listData.models.find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash"));
             
-            // Find the first model that supports generateContent and contains 'flash'
-            const activeModel = listData.models.find(m => 
-                m.supportedGenerationMethods.includes("generateContent") && 
-                m.name.includes("flash")
-            );
-
-            if (!activeModel) throw new Error("No active Flash model found.");
-
             const genUrl = `https://generativelanguage.googleapis.com/v1/${activeModel.name}:generateContent?key=${apiKey}`;
             const response = await fetch(genUrl, {
                 method: 'POST',
@@ -76,7 +67,6 @@
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
             const data = await response.json();
-            if (data.error) throw new Error(`AI Error: ${data.error.message}`);
             return data.candidates[0].content.parts[0].text;
         }
 
@@ -86,11 +76,7 @@
         function gapiLoaded() {
             gapi.load('client', () => {
                 gapi.client.init({
-                    discoveryDocs: [
-                        "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest",
-                        "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-                        "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
-                    ],
+                    discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest", "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest", "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"],
                 });
             });
         }
@@ -120,20 +106,23 @@
             try {
                 const now = new Date();
                 const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
-                const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-                const [inbox, calendar, tasks] = await Promise.all([
+                const [inbox, calendar, holidays] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
-                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 60 }),
-                    gapi.client.tasks.tasks.list({ tasklist: '@default' })
+                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
+                    // Fetch Public Holidays
+                    gapi.client.calendar.events.list({ calendarId: 'en.usa#holiday@group.v.calendar.google.com', timeMin: now.toISOString(), maxResults: 5 })
                 ]);
 
                 const activeEvents = (calendar.result.items || []).map(e => ({
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
-                    location: e.location || "",
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} at ${e.location || 'NONE SPECIFIED'}`
+                    location: e.location || "Campus",
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} @ ${e.location || 'Campus'}`
                 }));
+
+                const upcomingHolidays = (holidays.result.items || []).map(h => `- ${h.summary}: ${h.start.date}`).join('\n');
 
                 let emailContext = "";
                 if (inbox.result.messages) {
@@ -141,28 +130,23 @@
                     emailContext = details.map(d => `From: ${d.result.payload.headers.find(h=>h.name==='From').value} | Subj: ${d.result.payload.headers.find(h=>h.name==='Subject').value} | Snippet: ${d.result.snippet}`).join('\n');
                 }
 
-                const aiPrompt = `You are Christopher's Chief of Staff. Briefing for ${dateString}.
-                1. 48-hour focus. Assume 10-min travel for campus (NONE SPECIFIED) and 30-min for different locations.
-                2. Flag MLK Day or one-offs (Alex Honnold) in Future Highlights.
-                3. Do NOT list recurring classes beyond 48 hours.
-                \nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}`;
+                const aiPrompt = `You are Christopher's Chief of Staff. Review for ${dateString}.
+                
+                PRIORITIES:
+                1. 48-hour focus for granular details.
+                2. ONLY mention travel or "when to leave" if there is a back-to-back conflict or tight transition between different locations. 
+                3. Mention all upcoming holidays found in the list below.
+                4. Do NOT list recurring classes beyond 48 hours.
+
+                DATA:
+                Upcoming Holidays:\n${upcomingHolidays}
+                Calendar Events:\n${activeEvents.map(e => e.raw).join('\n')}
+                Emails:\n${emailContext}`;
 
                 const aiBriefing = await getAIResponse(aiPrompt);
 
-                container.innerHTML = `
-                    <div class="paul-weiss-container prose prose-sm max-w-none animate-fade-in">${marked.parse(aiBriefing)}</div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
-                        <section>
-                            <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-6 border-b pb-2">Verified Schedule</h2>
-                            ${activeEvents.filter(e => e.start <= tomorrow).map(e => `
-                                <div class="time-card">
-                                    <div class="time-meta"><p class="text-[10px] font-bold text-[#1D3557]">${e.start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p></div>
-                                    <div class="event-details"><p class="text-sm font-bold text-[#1D3557]">${e.summary}</p>${e.location ? `<p class="text-[10px] text-red-700">📍 ${e.location}</p>` : ''}</div>
-                                </div>`).join('')}
-                        </section>
-                    </div>`;
+                container.innerHTML = `<div class="paul-weiss-container prose prose-sm max-w-none animate-fade-in">${marked.parse(aiBriefing)}</div>`;
             } catch (err) {
-                console.error("SYNC ERROR:", err);
                 container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Error: ${err.message}</div>`;
             }
         }
