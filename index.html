@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v7.5 | Executive Chief of Staff</title>
+    <title>LionMail Helper v7.8 | Executive Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -30,7 +30,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v7.5</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v7.8</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -121,29 +121,34 @@
                 const tomorrow = new Date(now.getTime() + (24 * 60 * 60 * 1000));
                 const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-                const [inbox, calendar, tasks, drafts] = await Promise.all([
+                // UPDATED: Added dedicated 'scheduled' query
+                const [inbox, calendar, tasks, scheduled] = await Promise.all([
                     gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
                     gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
                     gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: true, showHidden: true }),
-                    gapi.client.gmail.users.drafts.list({ userId: 'me' })
+                    gapi.client.gmail.users.messages.list({ userId: 'me', q: 'label:scheduled' })
                 ]);
 
-                const allTasks = tasks.result.items || [];
-                const completedTaskTitles = allTasks.filter(t => t.status === 'completed').map(t => t.title);
-                const pendingTasks = allTasks.filter(t => t.status !== 'completed');
+                // STRICT TASK FILTER: Only show tasks where status is 'needsAction'
+                const pendingTasks = (tasks.result.items || []).filter(t => t.status === 'needsAction');
 
+                // LOCATION LOGIC: If location is missing, it is empty string.
                 const activeEvents = (calendar.result.items || []).map(e => ({
                     summary: e.summary,
                     start: new Date(e.start.dateTime || e.start.date),
-                    location: e.location || "",
-                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date} @ ${e.location || 'Unknown'}`
+                    location: e.location || null,
+                    raw: `- ${e.summary}: ${e.start.dateTime || e.start.date}${e.location ? ' @ ' + e.location : ''}`
                 }));
 
-                // Fetch Drafts/Scheduled context
-                let draftContext = "None detected.";
-                if (drafts.result.drafts) {
-                    const draftDetails = await Promise.all(drafts.result.drafts.slice(0, 5).map(d => gapi.client.gmail.users.drafts.get({ userId: 'me', id: d.id })));
-                    draftContext = draftDetails.map(d => `Subj: ${d.result.message.payload.headers.find(h=>h.name==='Subject')?.value || 'No Subject'} | Snippet: ${d.result.message.snippet}`).join('\n');
+                // SCHEDULED EMAIL LOGIC
+                let scheduledContext = "No scheduled emails found.";
+                if (scheduled.result.messages) {
+                    const scheduledDetails = await Promise.all(scheduled.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
+                    scheduledContext = scheduledDetails.map(d => {
+                        const subj = d.result.payload.headers.find(h=>h.name==='Subject')?.value || 'No Subject';
+                        const internalDate = new Date(parseInt(d.result.internalDate)); // Scheduled time often correlates here or requires deep parsing
+                        return `Scheduled Email: "${subj}" | Snippet: ${d.result.snippet}`;
+                    }).join('\n');
                 }
 
                 let emailContext = "";
@@ -164,18 +169,18 @@
 
                 STRATEGIC FILTERING:
                 1. 48-HOUR FOCUS.
-                2. NO LOCATION ASSUMPTIONS.
-                3. TASK SYNC: Ignore completed tasks: [${completedTaskTitles.join(', ')}].
+                2. LOCATION: If the data says nothing, say nothing. Do not assume "Campus" or "Unknown".
+                3. TASK SYNC: The provided task list is already filtered for active items only.
                 4. HOLIDAYS: Only mention if in the next 7 days.
 
-                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}`;
+                DATA:\nCALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}\nEMAILS:\n${emailContext}\nTASKS:\n${pendingTasks.map(t => t.title).join('\n')}`;
 
-                const schedulingPrompt = `You are Christopher's Chief of Staff. Review these pending/draft emails against his calendar and current date (${dateString}).
+                const schedulingPrompt = `You are Christopher's Chief of Staff. Review these SCHEDULED emails (which are set to send automatically) against his calendar and current date (${dateString}).
                 
-                DRAFTS/SCHEDULED:\n${draftContext}
+                SCHEDULED EMAILS:\n${scheduledContext}
                 CALENDAR:\n${activeEvents.map(e => e.raw).join('\n')}
 
-                TASK: If these emails mention specific dates/times, verify they don't conflict. If they are just drafts, note if they are "Good to Go" based on current context. Keep it brief. Use "✅ Good to Go" or "⚠️ Requires Review".`;
+                TASK: Double check them. Are they good to go? Note if the content might conflict with the calendar. Use "✅ Good to Go" or "⚠️ Requires Review".`;
 
                 const [aiBriefing, aiScheduling] = await Promise.all([
                     getAIResponse(briefingPrompt),
@@ -203,7 +208,7 @@
                                     </div>
                                     <div class="event-details">
                                         <p class="text-sm font-bold text-[#1D3557]">${e.summary}</p>
-                                        <p class="text-[10px] text-red-700 font-semibold uppercase">${e.location ? '📍 ' + e.location : ''}</p>
+                                        ${e.location ? `<p class="text-[10px] text-red-700 font-semibold uppercase">📍 ${e.location}</p>` : ''}
                                     </div>
                                 </div>`).join('')}
                         </section>
