@@ -40,46 +40,72 @@
     </div>
 
     <script>
-        /* --- SECURE VAULT LOGIC --- */
-        function getStoredKey(keyName, promptMsg) {
-            let val = localStorage.getItem(keyName);
-            if (!val || val === "null") {
-                val = prompt(promptMsg);
-                if (val) localStorage.setItem(keyName, val);
-            }
-            return val;
-        }
-
-        function resetKeys() {
-            if(confirm("Clear stored API keys and Client ID from this browser?")) {
-                localStorage.removeItem('GCP_CLIENT_ID');
-                localStorage.removeItem('GEMINI_API_KEY');
-                location.reload();
-            }
-        }
-
-        /* --- CONFIGURATION --- */
-        const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
-        let tokenClient;
-        let gapiInited = false;
-        let gisInited = false;
 
         /* --- AI ENGINE --- */
-        async function summarizeWithGemini(emailText) {
-            const apiKey = getStoredKey('GEMINI_API_KEY', "Enter your Gemini API Key (Personal Account):");
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-            const prompt = `You are an elite Law School Chief of Staff. Summarize these unread emails for Christopher. Focus on: actionable items, specific deadlines, and pickup locations (like JGH rooms). Tone: Minimalist, executive, sharp. Avoid fluff. Emails:\n${emailText}`;
-            
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-                const data = await response.json();
-                return data.candidates[0].content.parts[0].text;
-            } catch (e) { return "AI Synthesis offline. Please check your Gemini API Key."; }
+        /* --- SECURE VAULT LOGIC --- */
+    function getStoredKey(keyName, promptMsg) {
+        let val = localStorage.getItem(keyName);
+        if (!val || val === "null" || val.trim() === "") {
+            val = prompt(promptMsg);
+            if (val) localStorage.setItem(keyName, val.trim());
         }
+        return val;
+    }
+    
+    function resetKeys() {
+        if(confirm("Clear stored API keys and Client ID?")) {
+            localStorage.removeItem('GCP_CLIENT_ID');
+            localStorage.removeItem('GEMINI_API_KEY');
+            location.reload();
+        }
+    }
+
+    /* --- CONFIGURATION --- */
+    const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
+    let tokenClient;
+    let gapiInited = false;
+    let gisInited = false;
+    
+    /* --- AI ENGINE (v4.4 Improved) --- */
+    async function summarizeWithGemini(emailText) {
+        const apiKey = getStoredKey('GEMINI_API_KEY', "Enter your Gemini API Key:");
+        // Using the stable 1.5-flash model endpoint
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        
+        const requestBody = {
+            contents: [{
+                parts: [{
+                    text: `You are a Law School Chief of Staff. Summarize these emails for Christopher. Identify deadlines and pickup locations. Tone: Minimalist. Emails:\n${emailText}`
+                }]
+            }]
+        };
+    
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+    
+            const data = await response.json();
+    
+            if (data.error) {
+                console.error("Gemini API Error Details:", data.error);
+                return `AI Error ${data.error.code}: ${data.error.message}`;
+            }
+    
+            if (!data.candidates || !data.candidates[0].content) {
+                return "AI returned an empty response. Try refreshing.";
+            }
+    
+            return data.candidates[0].content.parts[0].text;
+        } catch (e) {
+            console.error("Fetch Error:", e);
+            return "Network Error: Unable to reach Gemini. Check your internet or API key.";
+        }
+    }
+    
+    // ... Keep your existing gapiLoaded, gisLoaded, and handleAuthClick functions ...
 
         /* --- AUTH LOGIC --- */
         function gapiLoaded() {
