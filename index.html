@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v8.8 | Executive Chief of Staff</title>
+    <title>LionMail Helper v9.0 | Executive Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -30,7 +30,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v8.8</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v9.0</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -66,22 +66,18 @@
             return doc.documentElement.textContent;
         }
 
-        // --- DYNAMIC MODEL SELECTION RESTORED ---
+        // --- AI AUTO-DISCOVERY ---
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
             try {
-                // 1. Auto-discover the available models
                 const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
                 const listResp = await fetch(listUrl);
                 const listData = await listResp.json();
                 
-                // 2. Select the newest model with "flash" in the name
-                // This ensures we always get the latest version (e.g. 1.5-flash-002) without hardcoding
                 const bestModel = (listData.models || [])
                     .find(m => m.name.includes("flash") && m.supportedGenerationMethods.includes("generateContent"))?.name 
                     || "models/gemini-1.5-flash";
 
-                // 3. Construct the URL dynamically
                 const genUrl = `https://generativelanguage.googleapis.com/v1beta/${bestModel}:generateContent?key=${apiKey}`;
                 
                 const response = await fetch(genUrl, {
@@ -92,8 +88,8 @@
                 const data = await response.json();
                 return data.candidates?.[0]?.content?.parts?.[0]?.text || "System Error: AI Response Empty.";
             } catch (e) {
-                console.error("AI Auto-Discovery Error:", e);
-                return "Network Error or Invalid Key.";
+                console.error("AI Error:", e);
+                return "AI Connection Error.";
             }
         }
 
@@ -145,19 +141,22 @@
                         gapi.client.gmail.users.messages.list({ userId: 'me', q: 'is:unread label:inbox' }),
                         gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 }),
                         gapi.client.calendar.events.list({ calendarId: 'en.usa#holiday@group.v.calendar.google.com', timeMin: now.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 5 }),
-                        // Task Filter: Show only incomplete (needsAction)
                         gapi.client.tasks.tasks.list({ tasklist: '@default', showCompleted: false, showHidden: false }),
                         gapi.client.gmail.users.messages.list({ userId: 'me', q: 'label:scheduled' })
                     ]);
                 } catch (apiErr) {
-                    console.error("Google API Sync Error:", apiErr);
-                    container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Failed: Check Google Permissions</div>`;
+                    console.error("API Sync Error:", apiErr);
+                    container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Sync Failed: Check Permissions</div>`;
                     return;
                 }
 
-                // 2. Process Calendar
+                // --- DATA PROCESSING ---
+                
+                // Calendar Processing (CRITICAL FIX: Exclude 'task' event types)
                 const activeEvents = (calendar.result.items || [])
                     .filter(e => e.status !== 'cancelled')
+                    // Exclude Google Tasks appearing as events to prevent double counting
+                    .filter(e => e.eventType !== 'task') 
                     .map(e => {
                         const start = new Date(e.start.dateTime || e.start.date);
                         const end = new Date(e.end.dateTime || e.end.date);
@@ -169,35 +168,37 @@
 
                 const holidayEvents = (holidays.result.items || []).map(h => `- HOLIDAY: ${h.summary} on ${h.start.date}`);
 
-                // 3. Process Emails
+                // Emails
                 let emailContext = "None.";
                 if (inbox.result.messages) {
                     const details = await Promise.all(inbox.result.messages.slice(0, 10).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
                     emailContext = details.map(d => `From: ${cleanText(d.result.payload.headers.find(h=>h.name==='From').value)} | Subj: ${cleanText(d.result.payload.headers.find(h=>h.name==='Subject').value)}`).join('\n');
                 }
 
-                // 4. Process Scheduled Audit
+                // Scheduled Emails
                 let scheduledContext = "None.";
                 if (scheduled.result.messages) {
                     const scheduledDetails = await Promise.all(scheduled.result.messages.slice(0, 5).map(m => gapi.client.gmail.users.messages.get({ userId: 'me', id: m.id })));
                     scheduledContext = scheduledDetails.map(d => `Subject: "${cleanText(d.result.payload.headers.find(h=>h.name==='Subject')?.value)}" | Snippet: ${cleanText(d.result.snippet)}`).join('\n');
                 }
 
-                // 5. Filter Tasks (Strict "needsAction" check)
-                const pendingTasks = (tasks.result.items || []).filter(t => t.status === 'needsAction');
+                // Task Processing
+                const pendingTasks = (tasks.result.items || []).filter(t => {
+                    return t.status === 'needsAction' && !t.hidden && !t.deleted && (!t.completed || t.completed === undefined);
+                });
 
-                // 6. AI Execution
+                // --- AI PROMPTING ---
                 const briefingPrompt = `DATE: ${dateString}.
-                CALENDAR (Check overlaps): ${activeEvents.map(e => e.raw).join('\n')}
+                CALENDAR: ${activeEvents.map(e => e.raw).join('\n')}
                 HOLIDAYS: ${holidayEvents.join('\n')}
                 EMAILS: ${emailContext}
-                PENDING TASKS (Ignore completed): ${pendingTasks.map(t => t.title).join('\n')}
+                PENDING TASKS (Strictly exclude completed): ${pendingTasks.map(t => t.title).join('\n')}
                 FORMATTING:
                     - Use "Daily Summary" style.
                     - Sections: 📧 Recent Email Activity, 📅 Today's Calendar Events, ⚠️ SCHEDULING CONFLICT DETECTED, 📋 Action Items.
                     - Highlight: Use 🚨 for overlaps.`;
 
-                const auditPrompt = `Review these emails for typos/firm name alignment. Text is cleaned of HTML.
+                const auditPrompt = `Review for typos. Text cleaned.
                 EMAILS: ${scheduledContext}
                 Format: 📧 [Subject] — [✅ Clean / ⚠️ Typo Found]`;
 
@@ -206,7 +207,7 @@
                     getAIResponse(auditPrompt)
                 ]);
 
-                // 7. UI Rendering
+                // --- RENDER ---
                 const next24h = activeEvents.filter(e => e.start > now && e.start <= tomorrow).slice(0, 6);
 
                 container.innerHTML = `
@@ -214,7 +215,7 @@
                         <div class="paul-weiss-container prose prose-sm max-w-none">${marked.parse(aiBriefing)}</div>
                     </section>
                     <section class="schedule-block animate-fade-in prose prose-sm max-w-none">
-                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4 pb-2 border-b">Outgoing Correspondence Audit</h2>
+                        <h2 class="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400 mb-4 pb-2 border-b">Outgoing Audit</h2>
                         ${marked.parse(aiAudit)}
                     </section>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-12 mt-12">
@@ -245,7 +246,7 @@
                     </div>`;
             } catch (err) {
                 console.error("Dashboard Error:", err);
-                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">Critical System Error. Check Console.</div>`;
+                container.innerHTML = `<div class="p-20 text-center text-xs text-red-500 font-bold uppercase">System Error. Check Console.</div>`;
             }
         }
     </script>
