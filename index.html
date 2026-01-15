@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LionMail Helper v9.0 | Executive Chief of Staff</title>
+    <title>LionMail Helper v9.1 | Executive Chief of Staff</title>
     
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -30,7 +30,7 @@
     <header class="flex justify-between items-end border-b-2 border-[#1D3557] pb-6 mb-12 max-w-4xl mx-auto">
         <div>
             <h1 class="text-4xl uppercase tracking-tighter text-[#1D3557]">LionMail Helper</h1>
-            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v9.0</p>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gray-400 mt-2 font-bold italic">Columbia Law • Executive Chief of Staff v9.1</p>
         </div>
         <div class="flex items-center gap-6">
             <button onclick="localStorage.clear(); location.reload();" class="text-[9px] uppercase tracking-widest text-gray-300 hover:text-red-600 transition-colors">Reset System</button>
@@ -152,11 +152,14 @@
 
                 // --- DATA PROCESSING ---
                 
-                // Calendar Processing (CRITICAL FIX: Exclude 'task' event types)
+                // Calendar Strict Filtering
                 const activeEvents = (calendar.result.items || [])
-                    .filter(e => e.status !== 'cancelled')
-                    // Exclude Google Tasks appearing as events to prevent double counting
-                    .filter(e => e.eventType !== 'task') 
+                    // 1. Must be Confirmed or Tentative (No cancelled/declined)
+                    .filter(e => e.status === 'confirmed' || e.status === 'tentative')
+                    // 2. Must NOT be a Task, OOO, or Focus Time
+                    .filter(e => !e.eventType || e.eventType === 'default') 
+                    // 3. Text Check: Filter out anything starting with "Canceled:" (Google convention)
+                    .filter(e => !e.summary.toLowerCase().startsWith('canceled:') && !e.summary.toLowerCase().startsWith('cancelled:'))
                     .map(e => {
                         const start = new Date(e.start.dateTime || e.start.date);
                         const end = new Date(e.end.dateTime || e.end.date);
@@ -192,7 +195,7 @@
                 CALENDAR: ${activeEvents.map(e => e.raw).join('\n')}
                 HOLIDAYS: ${holidayEvents.join('\n')}
                 EMAILS: ${emailContext}
-                PENDING TASKS (Strictly exclude completed): ${pendingTasks.map(t => t.title).join('\n')}
+                PENDING TASKS: ${pendingTasks.map(t => t.title).join('\n')}
                 FORMATTING:
                     - Use "Daily Summary" style.
                     - Sections: 📧 Recent Email Activity, 📅 Today's Calendar Events, ⚠️ SCHEDULING CONFLICT DETECTED, 📋 Action Items.
