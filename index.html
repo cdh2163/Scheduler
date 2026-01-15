@@ -49,7 +49,7 @@
         </div>
     </main>
 
-    <script>
+   <script>
         // --- UTILITIES ---
         function getStoredKey(keyName, promptMsg) {
             let val = localStorage.getItem(keyName);
@@ -96,6 +96,8 @@
         // --- AUTH ---
         const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly';
         let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
 
         function gapiLoaded() {
             gapi.load('client', () => gapi.client.init({
@@ -104,24 +106,36 @@
                     "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
                     "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
                 ],
-            }));
+            }).then(() => { gapiInited = true; }));
         }
 
         function gisLoaded() {
+            const clientId = getStoredKey('GCP_CLIENT_ID', "Enter Google Client ID:");
+            if (!clientId) { alert("Client ID required to proceed."); return; }
+
             tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: getStoredKey('GCP_CLIENT_ID', "Enter Google Client ID:"),
+                client_id: clientId,
                 scope: SCOPES,
-                callback: '', 
+                // FIX: Callback must be a function, not a string
+                callback: (resp) => {
+                    if (resp.error) {
+                        console.error("Auth Error:", resp);
+                        return;
+                    }
+                    document.getElementById('auth_btn').classList.add('hidden');
+                    document.getElementById('refresh_btn').classList.remove('hidden');
+                    document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
+                    runLionMailBriefing();
+                },
             });
+            gisInited = true;
         }
 
         function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                document.getElementById('auth_btn').classList.add('hidden');
-                document.getElementById('refresh_btn').classList.remove('hidden');
-                document.getElementById('dashboard').classList.remove('opacity-20', 'pointer-events-none');
-                runLionMailBriefing();
-            };
+            if (!tokenClient) {
+                alert("System initializing... please wait 2 seconds and try again.");
+                return;
+            }
             tokenClient.requestAccessToken({ prompt: 'select_account' });
         }
 
@@ -154,11 +168,8 @@
                 
                 // Calendar Strict Filtering
                 const activeEvents = (calendar.result.items || [])
-                    // 1. Must be Confirmed or Tentative (No cancelled/declined)
                     .filter(e => e.status === 'confirmed' || e.status === 'tentative')
-                    // 2. Must NOT be a Task, OOO, or Focus Time
                     .filter(e => !e.eventType || e.eventType === 'default') 
-                    // 3. Text Check: Filter out anything starting with "Canceled:" (Google convention)
                     .filter(e => !e.summary.toLowerCase().startsWith('canceled:') && !e.summary.toLowerCase().startsWith('cancelled:'))
                     .map(e => {
                         const start = new Date(e.start.dateTime || e.start.date);
@@ -191,6 +202,7 @@
                 });
 
                 // --- AI PROMPTING ---
+                // FIX: Syntax error fixed here as well
                 const briefingPrompt = `DATE: ${dateString}.
                 CALENDAR: ${activeEvents.map(e => e.raw).join('\n')}
                 HOLIDAYS: ${holidayEvents.join('\n')}
@@ -200,7 +212,7 @@
                     - Use "Daily Summary" style.
                     - Sections: 📋 Action Items, 📧 Recent Email Activity, 📅 Today's Calendar Events, ⚠️ SCHEDULING CONFLICT DETECTED.
                     - Highlight: Use 🚨 for overlaps.
-                    - Put important action items at the top. Use emojis such as 📝 to signify something like writing an email. More emojis less text;`
+                    - Put important action items at the top. Use emojis such as 📝 to signify something like writing an email. More emojis less text.`;
 
                 const auditPrompt = `Review for typos. Text cleaned.
                 EMAILS: ${scheduledContext}
