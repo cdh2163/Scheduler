@@ -66,22 +66,39 @@
             return doc.documentElement.textContent;
         }
 
+        // async function getAIResponse(prompt) {
+        //     const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
+        //     // Model reverted to original Chat selection: gemini-1.5-flash
+        //     const genUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            
+        //     try {
+        //         const response = await fetch(genUrl, {
+        //             method: 'POST',
+        //             headers: { 'Content-Type': 'application/json' },
+        //             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        //         });
+        //         const data = await response.json();
+        //         return data.candidates?.[0]?.content?.parts?.[0]?.text || "System Error: AI Response Empty.";
+        //     } catch (e) {
+        //         return "Network Error.";
+        //     }
+        // }
         async function getAIResponse(prompt) {
             const apiKey = getStoredKey('GEMINI_API_KEY', "Enter Gemini API Key:");
-            // Model reverted to original Chat selection: gemini-1.5-flash
-            const genUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             
-            try {
-                const response = await fetch(genUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-                const data = await response.json();
-                return data.candidates?.[0]?.content?.parts?.[0]?.text || "System Error: AI Response Empty.";
-            } catch (e) {
-                return "Network Error.";
-            }
+            // Auto-discover the latest model
+            const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+            const listData = await (await fetch(listUrl)).json();
+            const bestModel = (listData.models || []).find(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("flash"))?.name || "models/gemini-1.5-flash";
+
+            const genUrl = `https://generativelanguage.googleapis.com/v1/${bestModel}:generateContent?key=${apiKey}`;
+            const response = await fetch(genUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
         }
 
         // --- AUTH ---
@@ -165,9 +182,14 @@
                 HOLIDAYS (Check for MLK Day/others): ${holidayEvents.join('\n')}
                 EMAILS: ${emailContext}
                 TASKS: ${pendingTasks.map(t => t.title).join('\n')}
-                Brief me as a Chief of Staff.`;
+                FORMATTING:
+                    - Use my "Daily Summary" style.
+                    - Sections: 📧 Recent Email Activity, 📅 Today's Calendar Events, ⚠️ SCHEDULING CONFLICT DETECTED, 📋 Action Items.
+                    - CRITICAL: Check for overlaps in event durations (e.g. if one event ends after the next starts). 
+                    - Highlight: Use 🚨 for conflicts, 🔴 for high-priority emails, and 📋 for specific next steps.
+               
 
-                const auditPrompt = `Review these emails. Text is cleaned of HTML. Do not flag standard apostrophes. 
+                const auditPrompt = `Review these emails. Text is cleaned of HTML. Do not flag standard apostrophes. I am mostly concerned with typos, wrong names, and firms that don't seem to align with the target email.
                 EMAILS: ${scheduledContext}
                 Format: 📧 [Subject] — [✅ Clean / ⚠️ Typo Found]`;
 
